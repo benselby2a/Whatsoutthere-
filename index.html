@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>What's Out There?</title>
+<meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>🧭 What's Out There?</h1>
+      <p class="tagline">Point your device out to sea and find out what's on the other side.</p>
+    </header>
+
+    <section class="compass-card">
+      <div class="compass" id="compass">
+        <div class="compass-ring">
+          <span class="tick n">N</span>
+          <span class="tick e">E</span>
+          <span class="tick s">S</span>
+          <span class="tick w">W</span>
+          <div class="needle" id="needle"></div>
+        </div>
+      </div>
+      <div class="heading-readout" id="headingReadout">-- &deg;</div>
+      <div class="location-readout" id="locationReadout">Location: unknown</div>
+    </section>
+
+    <section class="controls">
+      <button id="enableBtn" class="btn primary">Enable Compass &amp; Location</button>
+      <button id="scanBtn" class="btn" disabled>What's across the sea?</button>
+    </section>
+
+    <section class="result" id="result" hidden></section>
+
+    <p class="status" id="status"></p>
+
+    <footer>
+      <details>
+        <summary>How this works &amp; limitations</summary>
+        <ul>
+          <li>Uses your device's compass (magnetometer) and GPS location — everything runs in your browser, no server involved.</li>
+          <li>Works best on an iPhone or iPad in Safari. Most desktop browsers and many Android browsers don't expose a compass heading.</li>
+          <li>The heading is relative to <strong>magnetic</strong> north, not true north, and can be thrown off by nearby metal or magnets.</li>
+          <li>Landmass detection uses a simplified world coastline (Natural Earth 110m). Small islands or narrow spits of land may be missed.</li>
+          <li>The search follows a great-circle path (the true "straight line" on a sphere), up to 20,000&nbsp;km, and stops at the first land it crosses after leaving the landmass you're standing on.</li>
+        </ul>
+      </details>
+      <p class="credit">Data: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> &middot; No backend, hosted on GitHub Pages.</p>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

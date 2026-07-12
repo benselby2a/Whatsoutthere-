@@ -1,0 +1,55 @@
+# What's Out There?
+
+A simple static web page that uses your iPhone/iPad's compass and GPS to figure
+out which landmass lies across the sea in the direction you're pointing.
+
+**No backend.** Everything — geolocation, compass heading, and the
+land-crossing calculation — runs client-side in the browser. It's plain
+HTML/CSS/JS, so it can be hosted directly on GitHub Pages with zero build
+step.
+
+## How it works
+
+1. On tapping **"Enable Compass & Location"**, the page requests:
+   - Compass heading via `DeviceOrientationEvent` (on iOS this requires
+     `DeviceOrientationEvent.requestPermission()`, triggered by the button
+     tap).
+   - Your GPS position via the Geolocation API.
+2. Tapping **"What's across the sea?"** walks a point outward from your
+   location along a great-circle path in the direction you're facing, in
+   15 km steps (refined with a bisection search once land is found), up to
+   20,000 km.
+3. Each candidate point is tested against a bundled, simplified world land
+   dataset (`data/countries.geojson`, derived from [Natural Earth](https://www.naturalearthdata.com/)
+   1:110m admin-0 countries) using a point-in-polygon (ray casting) test.
+   The page reports the first landmass hit after leaving the one you're
+   currently standing on.
+
+## Limitations
+
+- Requires a device with a magnetometer/compass — mostly iPhones and iPads
+  in Safari. Most desktops and many Android browsers don't expose a usable
+  compass heading.
+- Heading is relative to **magnetic** north, not true north, and can be
+  thrown off by nearby metal/magnets.
+- The coastline data is simplified (110m resolution), so small islands or
+  narrow spits of land can be missed.
+- It's a straight great-circle line, so it will "hit" any land the path
+  crosses, not necessarily the closest point of a country's coastline.
+
+## Running locally
+
+Just serve the directory with any static file server, e.g.:
+
+```sh
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000`. Note: geolocation and device orientation
+both require a secure context, so for anything other than `localhost` you'll
+need HTTPS (which GitHub Pages provides automatically).
+
+## Deploying to GitHub Pages
+
+Enable GitHub Pages for this repository (Settings → Pages), serving from the
+branch/folder containing these files (root). No build step is required.
