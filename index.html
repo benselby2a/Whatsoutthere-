@@ -33,6 +33,8 @@
       <button id="scanBtn" class="btn" disabled>What's across the sea?</button>
     </section>
 
+    <p class="hint">Reports the next three countries along your heading, the seas in between, and the nearest city to each landfall.</p>
+
     <section class="result" id="result" hidden></section>
 
     <p class="status" id="status"></p>
@@ -44,8 +46,9 @@
           <li>Uses your device's compass (magnetometer) and GPS location — everything runs in your browser, no server involved.</li>
           <li>Works best on an iPhone or iPad in Safari. Most desktop browsers and many Android browsers don't expose a compass heading.</li>
           <li>The heading is relative to <strong>magnetic</strong> north, not true north, and can be thrown off by nearby metal or magnets.</li>
+          <li>It follows a great-circle path (the true "straight line" on a sphere) up to 20,000&nbsp;km, listing the next three countries you'd cross, the seas between them, and the nearest city to each landfall.</li>
+          <li>Countries are sovereign states from Natural Earth, so the UK shows as "United Kingdom" rather than "England", etc.</li>
           <li>Landmass detection uses a simplified world coastline (Natural Earth 110m). Small islands or narrow spits of land may be missed.</li>
-          <li>The search follows a great-circle path (the true "straight line" on a sphere), up to 20,000&nbsp;km, and stops at the first land it crosses after leaving the landmass you're standing on.</li>
         </ul>
       </details>
       <p class="credit">Data: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> &middot; No backend, hosted on GitHub Pages.</p>
