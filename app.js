@@ -1,10 +1,12 @@
 "use strict";
 
 const EARTH_RADIUS_KM = 6371;
-const STEP_KM = 15;
+const STEP_KM = 12;
 const MAX_KM = 20000;
-const REFINE_ITERATIONS = 8;
-const YIELD_EVERY = 60; // steps between UI-thread yields
+const REFINE_ITERATIONS = 9;
+const TARGET_LAND = 3; // how many countries to report along the heading
+const YIELD_EVERY = 80; // steps between UI-thread yields
+const KM_PER_MILE = 1.609344;
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -21,7 +23,9 @@ const els = {
   status: document.getElementById("status"),
 };
 
-let features = null; // loaded + indexed land polygons
+let landFeatures = null;
+let marineFeatures = null;
+let cities = null;
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 
@@ -48,6 +52,15 @@ function destinationPoint(lat, lon, bearingDeg, distanceKm) {
   let lonDeg = toDeg(lambda2);
   lonDeg = ((lonDeg + 540) % 360) - 180; // normalize to (-180, 180]
   return { lat: toDeg(phi2), lon: lonDeg };
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(a));
 }
 
 function pointInRing(x, y, ring) {
@@ -101,30 +114,87 @@ function computeBBox(geometry) {
   return [minX, minY, maxX, maxY];
 }
 
-function findFeatureAt(lon, lat) {
-  for (const f of features) {
-    const b = f.bbox;
-    if (lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3]) continue;
+function bboxContains(b, lon, lat) {
+  return lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3];
+}
+
+function findLandAt(lon, lat) {
+  for (const f of landFeatures) {
+    if (!bboxContains(f.bbox, lon, lat)) continue;
     if (pointInGeometry(lon, lat, f.geometry)) return f;
   }
   return null;
+}
+
+// Name the sea/ocean at a point, preferring the most specific (smallest) polygon.
+function seaNameAt(lon, lat) {
+  let best = null;
+  let bestArea = Infinity;
+  for (const f of marineFeatures) {
+    if (!bboxContains(f.bbox, lon, lat)) continue;
+    if (pointInGeometry(lon, lat, f.geometry)) {
+      if (f.area < bestArea) {
+        bestArea = f.area;
+        best = f.name;
+      }
+    }
+  }
+  return best;
+}
+
+function nearestCity(lat, lon) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const c of cities) {
+    const d = haversineKm(lat, lon, c.y, c.x);
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best ? { name: best.n, country: best.c, distKm: bestDist } : null;
 }
 
 function cardinal(deg) {
   return DIRS[Math.round(deg / 22.5) % 16];
 }
 
+function km(v) { return `${Math.round(v).toLocaleString()} km`; }
+function miles(v) { return `${Math.round(v / KM_PER_MILE).toLocaleString()} mi`; }
+function dist(v) { return `${miles(v)} (${km(v)})`; }
+
 // ---------- data loading ----------
 
-async function loadLandData() {
-  const res = await fetch("data/countries.geojson");
-  const geojson = await res.json();
-  features = geojson.features.map((f) => ({
+async function loadData() {
+  const [countriesRes, marineRes, citiesRes] = await Promise.all([
+    fetch("data/countries.geojson"),
+    fetch("data/marine.geojson"),
+    fetch("data/cities.json"),
+  ]);
+  const [countries, marine, citiesJson] = await Promise.all([
+    countriesRes.json(),
+    marineRes.json(),
+    citiesRes.json(),
+  ]);
+
+  landFeatures = countries.features.map((f) => ({
     name: f.properties.name,
     continent: f.properties.continent,
     geometry: f.geometry,
     bbox: computeBBox(f.geometry),
   }));
+
+  marineFeatures = marine.features.map((f) => {
+    const bbox = computeBBox(f.geometry);
+    return {
+      name: f.properties.name,
+      geometry: f.geometry,
+      bbox,
+      area: (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]),
+    };
+  });
+
+  cities = citiesJson.cities;
 }
 
 // ---------- sensors ----------
@@ -157,7 +227,7 @@ function updateLocationUI() {
 }
 
 function maybeEnableScan() {
-  if (currentHeading !== null && currentPosition && features) {
+  if (currentHeading !== null && currentPosition && landFeatures) {
     els.scanBtn.disabled = false;
   }
 }
@@ -201,81 +271,150 @@ function setStatus(text, isError) {
   els.status.style.color = isError ? "var(--danger)" : "";
 }
 
-// ---------- search ----------
+// ---------- route tracing ----------
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function findLandmass(startLat, startLon, heading) {
-  const startFeature = findFeatureAt(startLon, startLat);
-  let leftStartDistance = startFeature === null ? 0 : null;
+// Bisection: find the distance at which we enter `target` (a land feature or null),
+// somewhere between loKm and hiKm.
+function refineBoundary(startLat, startLon, heading, target, loKm, hiKm) {
+  let lo = loKm, hi = hiKm;
+  for (let r = 0; r < REFINE_ITERATIONS; r++) {
+    const mid = (lo + hi) / 2;
+    const p = destinationPoint(startLat, startLon, heading, mid);
+    if (findLandAt(p.lon, p.lat) === target) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+// Walk outward and record the ordered sequence of land/sea segments until we've
+// crossed TARGET_LAND distinct countries (the one you're on counts as the first).
+async function traceRoute(startLat, startLon, heading) {
+  let openFeat = findLandAt(startLon, startLat);
+  let open = { feat: openFeat, startKm: 0, startPt: { lat: startLat, lon: startLon } };
+  const segments = [];
+  let landOpened = openFeat ? 1 : 0;
+  let truncated = true;
 
   for (let d = STEP_KM, i = 0; d <= MAX_KM; d += STEP_KM, i++) {
     const pt = destinationPoint(startLat, startLon, heading, d);
-    const feat = findFeatureAt(pt.lon, pt.lat);
+    const feat = findLandAt(pt.lon, pt.lat);
 
-    if (feat === null) {
-      if (leftStartDistance === null) leftStartDistance = d;
-    } else if (feat !== startFeature || leftStartDistance !== null) {
-      // refine the exact crossing distance via bisection
-      let lo = d - STEP_KM, hi = d;
-      for (let r = 0; r < REFINE_ITERATIONS; r++) {
-        const mid = (lo + hi) / 2;
-        const midPt = destinationPoint(startLat, startLon, heading, mid);
-        const midFeat = findFeatureAt(midPt.lon, midPt.lat);
-        if (midFeat === feat) hi = mid; else lo = mid;
+    if (feat !== open.feat) {
+      const boundary = refineBoundary(startLat, startLon, heading, feat, d - STEP_KM, d);
+      const boundaryPt = destinationPoint(startLat, startLon, heading, boundary);
+      open.endKm = boundary;
+      segments.push(open);
+      open = { feat, startKm: boundary, startPt: boundaryPt };
+
+      if (feat) {
+        landOpened++;
+        if (landOpened >= TARGET_LAND) {
+          // We've just entered the final country to report; landfall is enough.
+          segments.push(open);
+          truncated = false;
+          break;
+        }
       }
-      return {
-        feature: feat,
-        distanceKm: hi,
-        seaCrossedKm: leftStartDistance === null ? 0 : hi - leftStartDistance,
-        point: destinationPoint(startLat, startLon, heading, hi),
-      };
     }
 
     if (i % YIELD_EVERY === 0) await sleep(0);
   }
-  return null;
+
+  if (truncated && open.endKm === undefined) {
+    open.endKm = MAX_KM;
+    open.truncated = true;
+    segments.push(open);
+  }
+
+  return segments;
 }
 
-// ---------- UI flow ----------
+// ---------- rendering ----------
 
-function renderResult(startLat, startLon, heading, outcome) {
+function renderResult(startLat, startLon, heading, segments) {
   els.result.hidden = false;
   els.result.classList.remove("error");
 
-  if (!outcome) {
+  const landCount = segments.filter((s) => s.feat).length;
+  if (landCount === 0) {
     els.result.classList.add("error");
     els.result.innerHTML = `
-      <h2>Nothing but ocean</h2>
-      <p>No land was found within 20,000&nbsp;km along that heading &mdash; you're likely looking across open ocean.</p>
+      <h2>Nothing but open water</h2>
+      <p>No land within ${dist(MAX_KM)} along ${Math.round(heading)}° ${cardinal(heading)} — you're looking out across open ocean.</p>
     `;
     return;
   }
 
-  const { feature, distanceKm, seaCrossedKm } = outcome;
-  const label = feature.name || "Unnamed landmass";
+  const items = [];
+  let landIndex = 0;
+
+  for (const seg of segments) {
+    if (seg.feat) {
+      landIndex++;
+      const city = nearestCity(seg.startPt.lat, seg.startPt.lon);
+      const cityLine = city
+        ? `Nearest city: <strong>${city.name}</strong>${city.country && city.country !== seg.feat.name ? ` (${city.country})` : ""} · ${dist(city.distKm)} away`
+        : "";
+
+      let where;
+      if (seg.startKm === 0) {
+        // The landmass you're standing on.
+        where = seg.truncated
+          ? `You're here — coastline more than ${dist(seg.endKm)} ahead`
+          : `You're here — leaving in about ${dist(seg.endKm)}`;
+      } else {
+        where = `Landfall at about ${dist(seg.startKm)}`;
+      }
+
+      items.push(`
+        <li class="route-land">
+          <div class="route-num">${landIndex}</div>
+          <div class="route-body">
+            <div class="route-name">${seg.feat.name || "Unnamed land"}</div>
+            <div class="route-sub">${where}</div>
+            ${cityLine ? `<div class="route-city">${cityLine}</div>` : ""}
+          </div>
+        </li>
+      `);
+    } else if (seg.startKm > 0 || seg.endKm !== undefined) {
+      // A stretch of sea between landmasses (skip a trailing open-ended one).
+      if (seg.endKm === undefined) continue;
+      const midKm = (seg.startKm + seg.endKm) / 2;
+      const midPt = destinationPoint(startLat, startLon, heading, midKm);
+      const name = seaNameAt(midPt.lon, midPt.lat) || "Open sea";
+      const width = seg.endKm - seg.startKm;
+      items.push(`
+        <li class="route-sea">
+          <span class="route-sea-name">🌊 ${name}</span>
+          <span class="route-sea-width">${dist(width)} across</span>
+        </li>
+      `);
+    }
+  }
+
   els.result.innerHTML = `
-    <h2>${label}</h2>
-    <p>Heading <strong>${Math.round(heading)}° ${cardinal(heading)}</strong> from your location, the next land is
-      <span class="distance">${Math.round(distanceKm).toLocaleString()} km</span> away.</p>
-    <p class="meta">${feature.continent ? `Continent: ${feature.continent} &middot; ` : ""}Sea crossed: ~${Math.round(seaCrossedKm).toLocaleString()} km</p>
+    <h2>Heading ${Math.round(heading)}° ${cardinal(heading)}</h2>
+    <p class="result-lead">Crossings from your location, in order:</p>
+    <ol class="route">${items.join("")}</ol>
   `;
 }
 
 async function runScan() {
-  if (currentHeading === null || !currentPosition || !features) return;
+  if (currentHeading === null || !currentPosition || !landFeatures) return;
   const heading = currentHeading;
   const { lat, lon } = currentPosition;
 
   els.scanBtn.disabled = true;
   els.result.hidden = true;
-  setStatus("Scanning the horizon…");
+  setStatus("Tracing the route across the sea…");
 
   try {
-    const outcome = await findLandmass(lat, lon, heading);
-    renderResult(lat, lon, heading, outcome);
+    const segments = await traceRoute(lat, lon, heading);
+    renderResult(lat, lon, heading, segments);
     setStatus("");
   } catch (e) {
     setStatus(`Something went wrong: ${e.message}`, true);
@@ -284,13 +423,15 @@ async function runScan() {
   }
 }
 
+// ---------- init ----------
+
 async function init() {
-  setStatus("Loading coastline data…");
+  setStatus("Loading map data…");
   try {
-    await loadLandData();
+    await loadData();
     setStatus("");
   } catch (e) {
-    setStatus("Failed to load land data. Check your connection and reload.", true);
+    setStatus("Failed to load map data. Check your connection and reload.", true);
   }
 
   els.enableBtn.addEventListener("click", async () => {

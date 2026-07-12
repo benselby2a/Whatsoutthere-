@@ -1,7 +1,8 @@
 # What's Out There?
 
-A simple static web page that uses your iPhone/iPad's compass and GPS to figure
-out which landmass lies across the sea in the direction you're pointing.
+A simple static web page that uses your iPhone/iPad's compass and GPS to trace
+where you're pointing out to sea and list the next few countries you'd reach —
+the seas in between and the nearest city to each landfall included.
 
 **No backend.** Everything — geolocation, compass heading, and the
 land-crossing calculation — runs client-side in the browser. It's plain
@@ -17,13 +18,18 @@ step.
    - Your GPS position via the Geolocation API.
 2. Tapping **"What's across the sea?"** walks a point outward from your
    location along a great-circle path in the direction you're facing, in
-   15 km steps (refined with a bisection search once land is found), up to
-   20,000 km.
+   12 km steps (each coastline crossing refined with a bisection search), up
+   to 20,000 km.
 3. Each candidate point is tested against a bundled, simplified world land
    dataset (`data/countries.geojson`, derived from [Natural Earth](https://www.naturalearthdata.com/)
-   1:110m admin-0 countries) using a point-in-polygon (ray casting) test.
-   The page reports the first landmass hit after leaving the one you're
-   currently standing on.
+   1:110m admin-0 countries) with a point-in-polygon (ray casting) test.
+   The page records the ordered sequence of crossings and reports the next
+   **three countries** along the heading (the one you're standing on counts
+   as the first).
+4. Each stretch of sea between countries is named by testing its midpoint
+   against Natural Earth's marine polygons (`data/marine.geojson`), and the
+   nearest city to each landfall is found from a bundled populated-places
+   list (`data/cities.json`).
 
 ## Limitations
 
@@ -34,6 +40,8 @@ step.
   thrown off by nearby metal/magnets.
 - The coastline data is simplified (110m resolution), so small islands or
   narrow spits of land can be missed.
+- Countries are sovereign states, so the UK is reported as "United Kingdom"
+  rather than "England", France includes overseas boundaries, and so on.
 - It's a straight great-circle line, so it will "hit" any land the path
   crosses, not necessarily the closest point of a country's coastline.
 
