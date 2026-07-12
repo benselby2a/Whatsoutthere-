@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>What's Out There?</title>
 <meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -15,25 +16,27 @@
     </header>
 
     <section class="compass-card">
-      <div class="compass" id="compass">
-        <div class="compass-ring">
+      <div class="aim-note">Aim the top of your device this way ↑</div>
+      <div class="compass">
+        <div class="compass-rose" id="compassRose">
           <span class="tick n">N</span>
           <span class="tick e">E</span>
           <span class="tick s">S</span>
           <span class="tick w">W</span>
-          <div class="needle" id="needle"></div>
         </div>
+        <div class="sightline"></div>
+        <div class="hub"></div>
       </div>
-      <div class="heading-readout" id="headingReadout">-- &deg;</div>
+      <div class="pointing-label" id="pointingLabel">Enable the compass to begin</div>
+      <div class="heading-readout" id="headingReadout">--&deg;</div>
       <div class="location-readout" id="locationReadout">Location: unknown</div>
     </section>
 
     <section class="controls">
       <button id="enableBtn" class="btn primary">Enable Compass &amp; Location</button>
-      <button id="scanBtn" class="btn" disabled>What's across the sea?</button>
     </section>
 
-    <p class="hint">Reports the next three countries along your heading, the seas in between, and the nearest city to each landfall.</p>
+    <p class="hint">Point the top edge of your device toward the sea and slowly turn. The results update live as your heading changes &mdash; the next three countries, the seas between them, and the nearest city to each landfall.</p>
 
     <section class="result" id="result" hidden></section>
 

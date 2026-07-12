@@ -5,8 +5,10 @@ const STEP_KM = 12;
 const MAX_KM = 20000;
 const REFINE_ITERATIONS = 9;
 const TARGET_LAND = 3; // how many countries to report along the heading
-const YIELD_EVERY = 80; // steps between UI-thread yields
 const KM_PER_MILE = 1.609344;
+const HEADING_EPSILON = 1.5; // deg of change before we re-run the trace
+const LIVE_INTERVAL_MS = 180; // min gap between live recomputes
+const MOVE_EPSILON_KM = 0.5; // location change before we re-run the trace
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -15,8 +17,8 @@ const DIRS = [
 
 const els = {
   enableBtn: document.getElementById("enableBtn"),
-  scanBtn: document.getElementById("scanBtn"),
-  needle: document.getElementById("needle"),
+  compassRose: document.getElementById("compassRose"),
+  pointingLabel: document.getElementById("pointingLabel"),
   headingReadout: document.getElementById("headingReadout"),
   locationReadout: document.getElementById("locationReadout"),
   result: document.getElementById("result"),
@@ -28,6 +30,9 @@ let marineFeatures = null;
 let cities = null;
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
+let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
+let liveTimer = null;
+let lastRendered = { heading: null, lat: null, lon: null };
 
 // ---------- geometry helpers ----------
 
@@ -159,6 +164,19 @@ function cardinal(deg) {
   return DIRS[Math.round(deg / 22.5) % 16];
 }
 
+const COMPASS_WORDS = { N: "north", E: "east", S: "south", W: "west" };
+function cardinalWords(deg) {
+  return cardinal(deg)
+    .split("")
+    .map((c) => COMPASS_WORDS[c])
+    .join("-");
+}
+
+function angleDelta(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
 function km(v) { return `${Math.round(v).toLocaleString()} km`; }
 function miles(v) { return `${Math.round(v / KM_PER_MILE).toLocaleString()} mi`; }
 function dist(v) { return `${miles(v)} (${km(v)})`; }
@@ -201,9 +219,16 @@ async function loadData() {
 
 function updateCompassUI(heading) {
   currentHeading = heading;
-  els.needle.style.transform = `rotate(${heading}deg)`;
+
+  // Rotate the rose so N points to magnetic north. Unwrap the target angle so
+  // the dial always turns the short way (e.g. 359°→1° doesn't spin backwards).
+  const target = -heading;
+  roseAngle += ((target - roseAngle + 540) % 360) - 180;
+  els.compassRose.style.transform = `rotate(${roseAngle}deg)`;
+
   els.headingReadout.textContent = `${Math.round(heading)}° ${cardinal(heading)}`;
-  maybeEnableScan();
+  els.pointingLabel.textContent = `Facing ${cardinalWords(heading)}`;
+  scheduleLiveScan();
 }
 
 function handleOrientation(event) {
@@ -223,13 +248,7 @@ function updateLocationUI() {
   if (!currentPosition) return;
   const { lat, lon } = currentPosition;
   els.locationReadout.textContent = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-  maybeEnableScan();
-}
-
-function maybeEnableScan() {
-  if (currentHeading !== null && currentPosition && landFeatures) {
-    els.scanBtn.disabled = false;
-  }
+  scheduleLiveScan();
 }
 
 function startGeolocation() {
@@ -273,10 +292,6 @@ function setStatus(text, isError) {
 
 // ---------- route tracing ----------
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 // Bisection: find the distance at which we enter `target` (a land feature or null),
 // somewhere between loKm and hiKm.
 function refineBoundary(startLat, startLon, heading, target, loKm, hiKm) {
@@ -292,14 +307,14 @@ function refineBoundary(startLat, startLon, heading, target, loKm, hiKm) {
 
 // Walk outward and record the ordered sequence of land/sea segments until we've
 // crossed TARGET_LAND distinct countries (the one you're on counts as the first).
-async function traceRoute(startLat, startLon, heading) {
+function traceRoute(startLat, startLon, heading) {
   let openFeat = findLandAt(startLon, startLat);
   let open = { feat: openFeat, startKm: 0, startPt: { lat: startLat, lon: startLon } };
   const segments = [];
   let landOpened = openFeat ? 1 : 0;
   let truncated = true;
 
-  for (let d = STEP_KM, i = 0; d <= MAX_KM; d += STEP_KM, i++) {
+  for (let d = STEP_KM; d <= MAX_KM; d += STEP_KM) {
     const pt = destinationPoint(startLat, startLon, heading, d);
     const feat = findLandAt(pt.lon, pt.lat);
 
@@ -320,8 +335,6 @@ async function traceRoute(startLat, startLon, heading) {
         }
       }
     }
-
-    if (i % YIELD_EVERY === 0) await sleep(0);
   }
 
   if (truncated && open.endKm === undefined) {
@@ -397,29 +410,42 @@ function renderResult(startLat, startLon, heading, segments) {
   }
 
   els.result.innerHTML = `
-    <h2>Heading ${Math.round(heading)}° ${cardinal(heading)}</h2>
+    <h2>Heading ${Math.round(heading)}° ${cardinal(heading)}<span class="live-badge"><span class="live-dot"></span>Live</span></h2>
     <p class="result-lead">Crossings from your location, in order:</p>
     <ol class="route">${items.join("")}</ol>
   `;
 }
 
-async function runScan() {
+// Recompute + render, but only when the heading or position has actually moved
+// enough to matter, and no more often than LIVE_INTERVAL_MS.
+function scheduleLiveScan() {
   if (currentHeading === null || !currentPosition || !landFeatures) return;
-  const heading = currentHeading;
-  const { lat, lon } = currentPosition;
+  if (liveTimer !== null) return;
+  liveTimer = setTimeout(runLiveScan, LIVE_INTERVAL_MS);
+}
 
-  els.scanBtn.disabled = true;
-  els.result.hidden = true;
-  setStatus("Tracing the route across the sea…");
+function runLiveScan() {
+  liveTimer = null;
+  if (currentHeading === null || !currentPosition || !landFeatures) return;
+
+  const { lat, lon } = currentPosition;
+  const heading = currentHeading;
+
+  const turned =
+    lastRendered.heading === null ||
+    angleDelta(heading, lastRendered.heading) >= HEADING_EPSILON;
+  const moved =
+    lastRendered.lat === null ||
+    haversineKm(lastRendered.lat, lastRendered.lon, lat, lon) >= MOVE_EPSILON_KM;
+  if (!turned && !moved) return;
 
   try {
-    const segments = await traceRoute(lat, lon, heading);
+    const segments = traceRoute(lat, lon, heading);
     renderResult(lat, lon, heading, segments);
+    lastRendered = { heading, lat, lon };
     setStatus("");
   } catch (e) {
     setStatus(`Something went wrong: ${e.message}`, true);
-  } finally {
-    els.scanBtn.disabled = false;
   }
 }
 
@@ -439,11 +465,10 @@ async function init() {
     setStatus("Requesting permissions…");
     await startOrientation();
     startGeolocation();
-    setStatus("");
     els.enableBtn.textContent = "Sensors enabled";
+    els.pointingLabel.textContent = "Move your device to wake the compass";
+    setStatus("Waiting for compass and GPS…");
   });
-
-  els.scanBtn.addEventListener("click", runScan);
 }
 
 init();

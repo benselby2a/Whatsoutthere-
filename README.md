@@ -16,17 +16,22 @@ step.
      `DeviceOrientationEvent.requestPermission()`, triggered by the button
      tap).
    - Your GPS position via the Geolocation API.
-2. Tapping **"What's across the sea?"** walks a point outward from your
-   location along a great-circle path in the direction you're facing, in
-   12 km steps (each coastline crossing refined with a bisection search), up
-   to 20,000 km.
-3. Each candidate point is tested against a bundled, simplified world land
+2. A fixed aiming line points up (the direction the top of your device
+   faces) while the compass rose rotates so **N** always points to magnetic
+   north — so you can orient the device toward the sea. The results then
+   **update live** as your heading changes (throttled, and only when the
+   heading or position actually moves).
+3. For the current heading the app walks a point outward from your
+   location along a great-circle path in that direction, in 12 km steps
+   (each coastline crossing refined with a bisection search), up to
+   20,000 km.
+4. Each candidate point is tested against a bundled, simplified world land
    dataset (`data/countries.geojson`, derived from [Natural Earth](https://www.naturalearthdata.com/)
    1:110m admin-0 countries) with a point-in-polygon (ray casting) test.
    The page records the ordered sequence of crossings and reports the next
    **three countries** along the heading (the one you're standing on counts
    as the first).
-4. Each stretch of sea between countries is named by testing its midpoint
+5. Each stretch of sea between countries is named by testing its midpoint
    against Natural Earth's marine polygons (`data/marine.geojson`), and the
    nearest city to each landfall is found from a bundled populated-places
    list (`data/cities.json`).

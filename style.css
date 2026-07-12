@@ -39,55 +39,101 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
   margin-bottom: 20px;
 }
 
-.compass {
-  width: 200px;
-  height: 200px;
-  margin: 0 auto 16px;
+.aim-note {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
 }
 
-.compass-ring {
+.compass {
   position: relative;
-  width: 100%;
-  height: 100%;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 14px;
+}
+
+/* The rotating compass rose: turns so N always points to magnetic north. */
+.compass-rose {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
   border: 2px solid var(--border);
-  background: radial-gradient(circle at 50% 50%, #1a2340 0%, #0e1428 100%);
+  background:
+    radial-gradient(circle at 50% 50%, #1a2340 0%, #0e1428 100%);
+  transition: transform 0.12s linear;
+}
+.compass-rose::before {
+  /* faint cross-hairs on the dial for a compass feel */
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat,
+    linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat;
+  opacity: 0.4;
 }
 
 .tick {
   position: absolute;
   color: var(--text-dim);
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
 }
-.tick.n { top: 8px; left: 50%; transform: translateX(-50%); color: var(--accent-2); }
-.tick.e { top: 50%; right: 8px; transform: translateY(-50%); }
+.tick.n {
+  top: 6px; left: 50%; transform: translateX(-50%);
+  color: #fff;
+  background: var(--danger);
+  padding: 1px 7px;
+  border-radius: 8px;
+}
+.tick.e { top: 50%; right: 10px; transform: translateY(-50%); }
 .tick.s { bottom: 8px; left: 50%; transform: translateX(-50%); }
-.tick.w { top: 50%; left: 8px; transform: translateY(-50%); }
+.tick.w { top: 50%; left: 10px; transform: translateY(-50%); }
 
-.needle {
+/* Fixed aiming line: always points up = the direction the device faces. */
+.sightline {
+  position: absolute;
+  left: 50%;
+  top: -16px;
+  width: 3px;
+  height: calc(50% + 16px);
+  margin-left: -1.5px;
+  background: linear-gradient(180deg, var(--accent), rgba(79, 209, 197, 0.35));
+  border-radius: 3px;
+  z-index: 3;
+  pointer-events: none;
+}
+.sightline::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 12px solid var(--accent);
+}
+
+.hub {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 4px;
-  height: 78px;
-  margin-left: -2px;
-  margin-top: -78px;
-  transform-origin: 50% 100%;
-  background: linear-gradient(180deg, var(--accent-2) 0%, var(--accent-2) 55%, transparent 55%);
-  border-radius: 4px;
-  transition: transform 0.15s ease-out;
-}
-.needle::after {
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
   border-radius: 50%;
-  transform: translateX(-50%);
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px var(--bg-card);
+  z-index: 4;
+}
+
+.pointing-label {
+  font-size: 1rem;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+  text-transform: capitalize;
 }
 
 .heading-readout {
@@ -146,6 +192,34 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
 .result.error { border-color: var(--danger); }
 .result.error h2 { color: var(--danger); }
 .result-lead { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 14px; }
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  vertical-align: middle;
+  margin-left: 8px;
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: livepulse 1.4s ease-in-out infinite;
+}
+@keyframes livepulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+  .compass-rose { transition: none; }
+}
 
 .route { list-style: none; margin: 0; padding: 0; }
 
