@@ -30,6 +30,12 @@ const els = {
   dotCompass: document.getElementById("dotCompass"),
   dotLocation: document.getElementById("dotLocation"),
   dotNetwork: document.getElementById("dotNetwork"),
+  wootBtn: document.getElementById("wootBtn"),
+  wootPanel: document.getElementById("wootPanel"),
+  wootTitle: document.getElementById("wootTitle"),
+  wootMeta: document.getElementById("wootMeta"),
+  wootList: document.getElementById("wootList"),
+  wootClose: document.getElementById("wootClose"),
 };
 
 let compassGotReading = false;
@@ -42,6 +48,8 @@ function setPermStatus(kind, state) {
 let landFeatures = null;
 let marineFeatures = null;
 let cities = null;
+let sealife = null;
+let wootData = null; // current "who's out there" context
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
@@ -235,16 +243,19 @@ function dist(v) { return `${miles(v)} (${km(v)})`; }
 // ---------- data loading ----------
 
 async function loadData() {
-  const [countriesRes, marineRes, citiesRes] = await Promise.all([
+  const [countriesRes, marineRes, citiesRes, sealifeRes] = await Promise.all([
     fetch("data/countries.geojson"),
     fetch("data/marine.geojson"),
     fetch("data/cities.json"),
+    fetch("data/sealife.json"),
   ]);
-  const [countries, marine, citiesJson] = await Promise.all([
+  const [countries, marine, citiesJson, sealifeJson] = await Promise.all([
     countriesRes.json(),
     marineRes.json(),
     citiesRes.json(),
+    sealifeRes.json(),
   ]);
+  sealife = sealifeJson;
 
   landFeatures = countries.features.map((f) => ({
     name: f.properties.name,
@@ -576,6 +587,7 @@ function renderResult(startLat, startLon, heading, segments) {
   els.mapEmpty.hidden = true;
   requestMapSpin();
   drawMapNow(true);
+  updateWoot(startLat, startLon, heading, segments);
 
   const hasLand = segments.some((s) => s.feat && s.startKm > 0);
   setStatus(hasLand ? "" : `Open ocean — no land within range facing ${cardinal(heading)}.`);
@@ -978,6 +990,107 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
   ctx.lineWidth = 2.5; ctx.strokeStyle = C.userRing; ctx.stroke();
 }
 
+// ---------- who's out there (sea life) ----------
+
+const COAST_MAX_KM = 55; // treat as "on the coast facing the sea" within this
+const SEASON_FLIP = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
+
+function currentSeason(lat) {
+  const m = new Date().getMonth(); // 0 = January
+  let s;
+  if (m === 11 || m <= 1) s = "winter";
+  else if (m <= 4) s = "spring";
+  else if (m <= 7) s = "summer";
+  else s = "autumn";
+  return lat < 0 ? SEASON_FLIP[s] : s; // southern hemisphere is flipped
+}
+
+// Rough ocean basin for a point — the fallback when the specific sea isn't in
+// the dataset. Returns a key present in sealife.oceans.
+function oceanBasin(lat, lon) {
+  if (lat <= -60) return "SOUTHERN OCEAN";
+  if (lat >= 66) return "Arctic Ocean";
+  if (lon >= 20 && lon <= 147 && lat <= 30) return "INDIAN OCEAN";
+  const inPacific = lon >= 120 || lon <= -70; // Pacific straddles the antimeridian
+  if (inPacific) return lat >= 0 ? "North Pacific Ocean" : "South Pacific Ocean";
+  return lat >= 0 ? "North Atlantic Ocean" : "South Atlantic Ocean";
+}
+
+function prettySea(name) {
+  if (name === "INDIAN OCEAN") return "Indian Ocean";
+  if (name === "SOUTHERN OCEAN") return "Southern Ocean";
+  return name;
+}
+
+function seaLifeFor(seaName, lat, lon, season) {
+  if (!sealife) return [];
+  const list = (seaName && sealife.seas[seaName]) || sealife.oceans[oceanBasin(lat, lon)] || [];
+  const inSeason = list.filter((a) => !a.seasons || a.seasons.includes(season));
+  const chosen = inSeason.length ? inSeason : list;
+  return chosen.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
+}
+
+// Work out the water you're facing (if you're on/near the coast looking seaward)
+// and refresh the "Who's out there?" trigger + panel.
+function updateWoot(startLat, startLon, heading, segments) {
+  let seaSeg = null;
+  for (const s of segments) {
+    if (!s.feat && s.endKm !== undefined) { seaSeg = s; break; }
+  }
+  if (!sealife || !seaSeg || seaSeg.startKm > COAST_MAX_KM) {
+    wootData = null;
+    els.wootBtn.hidden = true;
+    if (!els.wootPanel.hidden) closeWoot();
+    return;
+  }
+
+  // Sample a point out in the water to name the sea reliably.
+  const sampleKm = seaSeg.startKm + Math.min(20, (seaSeg.endKm - seaSeg.startKm) / 2 || 5);
+  const wp = destinationPoint(startLat, startLon, heading, sampleKm);
+  const rawSea = seaNameAt(wp.lon, wp.lat);
+  const displaySea = prettySea(rawSea || oceanBasin(wp.lat, wp.lon));
+  const season = currentSeason(wp.lat);
+  const animals = seaLifeFor(rawSea, wp.lat, wp.lon, season);
+  const city = nearestCity(startLat, startLon);
+
+  wootData = { sea: displaySea, season, animals, cityName: city ? city.name : null };
+  els.wootBtn.hidden = false;
+  els.wootBtn.querySelector(".woot-label").textContent = `🐋 Who's out there? · ${displaySea}`;
+  if (!els.wootPanel.hidden) renderWootPanel();
+}
+
+function renderWootPanel() {
+  if (!wootData) return;
+  els.wootTitle.textContent = wootData.sea;
+  const seasonCap = wootData.season.charAt(0).toUpperCase() + wootData.season.slice(1);
+  els.wootMeta.textContent = `${seasonCap}${wootData.cityName ? " · near " + wootData.cityName : ""}`;
+  if (!wootData.animals.length) {
+    els.wootList.innerHTML = `<li class="woot-empty">No sea-life data for this water yet.</li>`;
+    return;
+  }
+  els.wootList.innerHTML = wootData.animals
+    .map((a) => {
+      const c = Math.max(0, Math.min(5, a.commonality));
+      const dots = "●".repeat(c) + "○".repeat(5 - c);
+      return `<li class="woot-item">
+        <span class="woot-emoji">${a.emoji || "🐟"}</span>
+        <span class="woot-name">${a.name}</span>
+        <span class="woot-rating" title="${c}/5 — how commonly seen">${dots}</span>
+      </li>`;
+    })
+    .join("");
+}
+
+function openWoot() {
+  if (!wootData) return;
+  renderWootPanel();
+  els.wootPanel.hidden = false;
+}
+
+function closeWoot() {
+  els.wootPanel.hidden = true;
+}
+
 // ---------- init ----------
 
 async function init() {
@@ -1001,6 +1114,10 @@ async function init() {
   window.addEventListener("resize", drawMapNow);
 
   document.addEventListener("visibilitychange", () => setSensorsActive(!document.hidden));
+
+  els.wootBtn.addEventListener("click", openWoot);
+  els.wootClose.addEventListener("click", closeWoot);
+  els.wootPanel.addEventListener("click", (e) => { if (e.target === els.wootPanel) closeWoot(); });
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
