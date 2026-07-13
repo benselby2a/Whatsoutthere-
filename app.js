@@ -993,27 +993,24 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
 // ---------- who's out there (sea life) ----------
 
 const COAST_MAX_KM = 55; // treat as "on the coast facing the sea" within this
-const SEASON_FLIP = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
-
-function currentSeason(lat) {
-  const m = new Date().getMonth(); // 0 = January
-  let s;
-  if (m === 11 || m <= 1) s = "winter";
-  else if (m <= 4) s = "spring";
-  else if (m <= 7) s = "summer";
-  else s = "autumn";
-  return lat < 0 ? SEASON_FLIP[s] : s; // southern hemisphere is flipped
-}
 
 // Rough ocean basin for a point — the fallback when the specific sea isn't in
-// the dataset. Returns a key present in sealife.oceans.
+// the dataset. Returns a key present in sealife.oceans. Longitude alone can't
+// split Atlantic from Pacific in the Americas (both coasts share longitudes),
+// so the Americas use a latitude-aware rule.
 function oceanBasin(lat, lon) {
   if (lat <= -60) return "SOUTHERN OCEAN";
   if (lat >= 66) return "Arctic Ocean";
-  if (lon >= 20 && lon <= 147 && lat <= 30) return "INDIAN OCEAN";
-  const inPacific = lon >= 120 || lon <= -70; // Pacific straddles the antimeridian
-  if (inPacific) return lat >= 0 ? "North Pacific Ocean" : "South Pacific Ocean";
-  return lat >= 0 ? "North Atlantic Ocean" : "South Atlantic Ocean";
+  const north = lat >= 0;
+  // Indian Ocean (Arabian Sea, Bay of Bengal, and south of Indonesia).
+  if (lon >= 20 && lon <= 100 && lat <= 30) return "INDIAN OCEAN";
+  if (lon > 100 && lon <= 147 && lat <= 0) return "INDIAN OCEAN";
+  // Pacific: open west/central Pacific, plus the western coasts of the Americas.
+  if (lon >= 105 || lon <= -100 || (lat < 8 && lon <= -70)) {
+    return north ? "North Pacific Ocean" : "South Pacific Ocean";
+  }
+  // Everything else is Atlantic (incl. Caribbean, Gulf, US east coast, S America east).
+  return north ? "North Atlantic Ocean" : "South Atlantic Ocean";
 }
 
 function prettySea(name) {
@@ -1022,12 +1019,10 @@ function prettySea(name) {
   return name;
 }
 
-function seaLifeFor(seaName, lat, lon, season) {
+function seaLifeFor(seaName, lat, lon) {
   if (!sealife) return [];
   const list = (seaName && sealife.seas[seaName]) || sealife.oceans[oceanBasin(lat, lon)] || [];
-  const inSeason = list.filter((a) => !a.seasons || a.seasons.includes(season));
-  const chosen = inSeason.length ? inSeason : list;
-  return chosen.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
+  return list.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
 }
 
 // Work out the water you're facing (if you're on/near the coast looking seaward)
@@ -1049,11 +1044,10 @@ function updateWoot(startLat, startLon, heading, segments) {
   const wp = destinationPoint(startLat, startLon, heading, sampleKm);
   const rawSea = seaNameAt(wp.lon, wp.lat);
   const displaySea = prettySea(rawSea || oceanBasin(wp.lat, wp.lon));
-  const season = currentSeason(wp.lat);
-  const animals = seaLifeFor(rawSea, wp.lat, wp.lon, season);
+  const animals = seaLifeFor(rawSea, wp.lat, wp.lon);
   const city = nearestCity(startLat, startLon);
 
-  wootData = { sea: displaySea, season, animals, cityName: city ? city.name : null };
+  wootData = { sea: displaySea, animals, cityName: city ? city.name : null };
   els.wootBtn.hidden = false;
   els.wootBtn.querySelector(".woot-label").textContent = `🐋 Who's out there? · ${displaySea}`;
   if (!els.wootPanel.hidden) renderWootPanel();
@@ -1062,8 +1056,7 @@ function updateWoot(startLat, startLon, heading, segments) {
 function renderWootPanel() {
   if (!wootData) return;
   els.wootTitle.textContent = wootData.sea;
-  const seasonCap = wootData.season.charAt(0).toUpperCase() + wootData.season.slice(1);
-  els.wootMeta.textContent = `${seasonCap}${wootData.cityName ? " · near " + wootData.cityName : ""}`;
+  els.wootMeta.textContent = wootData.cityName ? `Near ${wootData.cityName}` : "";
   if (!wootData.animals.length) {
     els.wootList.innerHTML = `<li class="woot-empty">No sea-life data for this water yet.</li>`;
     return;
