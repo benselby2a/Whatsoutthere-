@@ -1026,6 +1026,27 @@ function prettySea(name) {
   return name;
 }
 
+// Ocean-basin names as they appear literally in the marine dataset — used to
+// tell "we matched a real but generic ocean polygon" apart from "we matched a
+// specific named sea", so regional overrides only kick in for the former.
+const GENERIC_OCEAN_NAMES = new Set([
+  "North Atlantic Ocean", "South Atlantic Ocean",
+  "North Pacific Ocean", "South Pacific Ocean",
+  "INDIAN OCEAN", "SOUTHERN OCEAN", "Arctic Ocean",
+]);
+
+// Coastal stretches with well-documented, locally distinct marine life but no
+// enclosed/named sea of their own in the marine dataset (they're just tagged
+// with the parent ocean's name). Checked only when the matched polygon was one
+// of the generic ocean names above, so a real named sea is never overridden.
+function regionalOverride(lat, lon) {
+  // East African coast: Somalia's southern coast through Kenya to Tanzania —
+  // tagged plain "Indian Ocean", despite well-documented reef/whale-shark/
+  // turtle-nesting habitat (Watamu, Diani, Kiunga).
+  if (lat >= -7 && lat <= 2 && lon >= 38 && lon <= 43) return "East African Coast";
+  return null;
+}
+
 function seaLifeFor(seaName, lat, lon) {
   if (!sealife) return [];
   // Prefer whatever named marine polygon was actually found (seaName) — it
@@ -1056,7 +1077,10 @@ function updateWoot(startLat, startLon, heading, segments) {
   // Sample a point out in the water to name the sea reliably.
   const sampleKm = seaSeg.startKm + Math.min(20, (seaSeg.endKm - seaSeg.startKm) / 2 || 5);
   const wp = destinationPoint(startLat, startLon, heading, sampleKm);
-  const rawSea = seaNameAt(wp.lon, wp.lat);
+  let rawSea = seaNameAt(wp.lon, wp.lat);
+  if (!rawSea || GENERIC_OCEAN_NAMES.has(rawSea)) {
+    rawSea = regionalOverride(wp.lat, wp.lon) || rawSea;
+  }
   const displaySea = prettySea(rawSea || oceanBasin(wp.lat, wp.lon));
   const animals = seaLifeFor(rawSea, wp.lat, wp.lon);
   const city = nearestCity(startLat, startLon);
