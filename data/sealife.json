@@ -1359,6 +1359,58 @@
         "emoji": "🦈",
         "commonality": 2
       }
+    ],
+    "East African Coast": [
+      {
+        "name": "Bottlenose dolphin",
+        "emoji": "🐬",
+        "commonality": 4
+      },
+      {
+        "name": "Green sea turtle",
+        "emoji": "🐢",
+        "commonality": 4
+      },
+      {
+        "name": "Whale shark",
+        "emoji": "🦈",
+        "commonality": 3
+      },
+      {
+        "name": "Spinner dolphin",
+        "emoji": "🐬",
+        "commonality": 3
+      },
+      {
+        "name": "Humpback whale",
+        "emoji": "🐋",
+        "commonality": 3
+      },
+      {
+        "name": "Hawksbill turtle",
+        "emoji": "🐢",
+        "commonality": 3
+      },
+      {
+        "name": "Parrotfish",
+        "emoji": "🐠",
+        "commonality": 3
+      },
+      {
+        "name": "Reef manta ray",
+        "emoji": "🐟",
+        "commonality": 2
+      },
+      {
+        "name": "Olive ridley turtle",
+        "emoji": "🐢",
+        "commonality": 2
+      },
+      {
+        "name": "Dugong",
+        "emoji": "🦭",
+        "commonality": 1
+      }
     ]
   },
   "oceans": {
