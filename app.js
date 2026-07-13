@@ -262,7 +262,21 @@ function startGeolocation() {
       updateLocationUI();
     },
     (err) => {
-      setStatus(`Location error: ${err.message}`, true);
+      if (err.code === err.PERMISSION_DENIED) {
+        setStatus(
+          "Location permission was denied. On iPhone: Settings → Privacy & Security → " +
+            "Location Services must be On, and Safari Websites set to \"While Using\". " +
+            "If you tapped \"Don't Allow\" earlier, Safari remembers it — reload and tap " +
+            "\"aA\" in the address bar → Website Settings → Location → Allow.",
+          true
+        );
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        setStatus("Your location is currently unavailable — try again with a clearer view of the sky.", true);
+      } else if (err.code === err.TIMEOUT) {
+        setStatus("Timed out getting your location. Tap Enable again to retry.", true);
+      } else {
+        setStatus(`Location error: ${err.message}`, true);
+      }
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   );
@@ -460,14 +474,19 @@ async function init() {
     setStatus("Failed to load map data. Check your connection and reload.", true);
   }
 
-  els.enableBtn.addEventListener("click", async () => {
+  els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
-    setStatus("Requesting permissions…");
-    await startOrientation();
-    startGeolocation();
     els.enableBtn.textContent = "Sensors enabled";
     els.pointingLabel.textContent = "Move your device to wake the compass";
     setStatus("Waiting for compass and GPS…");
+    // Kick off BOTH permission requests synchronously, while we still have the
+    // user activation from this tap. iOS Safari (iPhone especially) denies a
+    // geolocation prompt that fires after `await`-ing the orientation dialog,
+    // so we must not await before calling watchPosition(). Set the status
+    // first so a permission error (sync or async) replaces it rather than the
+    // other way round.
+    startGeolocation();
+    startOrientation();
   });
 }
 
