@@ -205,12 +205,34 @@ h1 { font-size: 1.2rem; margin: 0; }
 }
 .map-empty[hidden] { display: none; }
 
-.result {
+/* Collapsed by default — the map carries the information; this is the detail. */
+.result-details {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 10px 14px;
-  max-height: 30vh;
+  flex: 0 0 auto;
+}
+.result-details[hidden] { display: none; }
+.result-details > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 11px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.result-details > summary::-webkit-details-marker { display: none; }
+.result-details > summary::after {
+  content: "▸";
+  float: right;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+.result-details[open] > summary::after { transform: rotate(90deg); }
+
+.result {
+  padding: 0 14px 12px;
+  max-height: 34vh;
   overflow-y: auto;
 }
 .result h2 { margin: 0 0 2px; font-size: 1.05rem; }
