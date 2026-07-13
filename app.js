@@ -23,6 +23,8 @@ const els = {
   locationReadout: document.getElementById("locationReadout"),
   result: document.getElementById("result"),
   status: document.getElementById("status"),
+  map: document.getElementById("map"),
+  mapEmpty: document.getElementById("mapEmpty"),
 };
 
 let landFeatures = null;
@@ -34,6 +36,7 @@ let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
 let liveTimer = null;
 let lastRendered = { heading: null, lat: null, lon: null };
 let geoWatchId = null;
+let lastMapArgs = null;
 
 // ---------- geometry helpers ----------
 
@@ -381,6 +384,10 @@ function renderResult(startLat, startLon, heading, segments) {
   els.result.hidden = false;
   els.result.classList.remove("error");
 
+  drawMap(startLat, startLon, heading, segments);
+  lastMapArgs = { startLat, startLon, heading, segments };
+  els.mapEmpty.hidden = true;
+
   const landCount = segments.filter((s) => s.feat).length;
   if (landCount === 0) {
     els.result.classList.add("error");
@@ -478,6 +485,171 @@ function runLiveScan() {
   }
 }
 
+// ---------- map ----------
+
+function mapColors() {
+  const dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return dark
+    ? { sea: "#0d1526", land: "#26324e", coast: "#3c4a6e", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526" }
+    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#93a6c6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff" };
+}
+
+// Draw one land feature (Polygon/MultiPolygon), each polygon as its own path so
+// even-odd hole handling doesn't bleed across separate islands. `seamPx` breaks
+// an edge when consecutive points jump too far in x, which stops countries near
+// the antimeridian from streaking a line across the whole map.
+function drawFeature(ctx, geometry, project, fill, stroke, lineWidth, seamPx) {
+  const polys = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  for (const rings of polys) {
+    ctx.beginPath();
+    for (const ring of rings) {
+      let prevX = null;
+      for (let i = 0; i < ring.length; i++) {
+        const [x, y] = project(ring[i][1], ring[i][0]);
+        if (i === 0 || (prevX !== null && Math.abs(x - prevX) > seamPx)) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        prevX = x;
+      }
+    }
+    ctx.fillStyle = fill;
+    ctx.fill("evenodd");
+    if (lineWidth > 0) {
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+  }
+}
+
+// A rough canvas map (no tiles / no network) showing the user, the great-circle
+// path, and the outlines of the countries ahead, highlighted.
+function drawMap(startLat, startLon, heading, segments) {
+  const canvas = els.map;
+  const wrap = canvas.parentElement;
+  const cssW = wrap.clientWidth;
+  const cssH = wrap.clientHeight;
+  if (!cssW || !cssH) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const C = mapColors();
+
+  const highlights = new Set(segments.filter((s) => s.feat).map((s) => s.feat));
+  let farKm = 0;
+  for (const s of segments) {
+    if (typeof s.startKm === "number") farKm = Math.max(farKm, s.startKm);
+    if (typeof s.endKm === "number") farKm = Math.max(farKm, s.endKm);
+  }
+  const anyLand = highlights.size > 0;
+  const framingKm = anyLand ? Math.max(farKm, 200) : Math.min(Math.max(farKm, 200), 5000);
+
+  // Unwrap longitudes relative to the start so paths/shapes stay continuous
+  // across the antimeridian.
+  const unwrap = (lon) => {
+    let x = lon;
+    while (x - startLon > 180) x -= 360;
+    while (x - startLon < -180) x += 360;
+    return x;
+  };
+
+  // Sample the great-circle path for framing + drawing.
+  const pathPts = [];
+  const N = 160;
+  for (let i = 0; i <= N; i++) {
+    pathPts.push(destinationPoint(startLat, startLon, heading, (framingKm * i) / N));
+  }
+  const framePts = [{ lat: startLat, lon: startLon }, ...pathPts];
+
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (const p of framePts) {
+    const lon = unwrap(p.lon);
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+  }
+
+  const midLat = (minLat + maxLat) / 2;
+  const k = Math.max(0.15, Math.cos(toRad(midLat))); // longitude compression
+  let minX = minLon * k, maxX = maxLon * k;
+
+  const padX = (maxX - minX) * 0.12 || 0.5;
+  const padY = (maxLat - minLat) * 0.12 || 0.5;
+  minX -= padX; maxX += padX; minLat -= padY; maxLat += padY;
+
+  const geoW = maxX - minX, geoH = maxLat - minLat;
+  const scale = Math.min(cssW / geoW, cssH / geoH);
+  const offX = (cssW - geoW * scale) / 2;
+  const offY = (cssH - geoH * scale) / 2;
+
+  const project = (lat, lon) => [
+    offX + (unwrap(lon) * k - minX) * scale,
+    offY + (maxLat - lat) * scale,
+  ];
+
+  ctx.fillStyle = C.sea;
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  const viewMinLon = minX / k, viewMaxLon = maxX / k;
+
+  for (const f of landFeatures) {
+    const b = f.bbox;
+    if (b[3] < minLat || b[1] > maxLat) continue;
+    const lo = unwrap(b[0]), hi = unwrap(b[2]);
+    if (Math.max(lo, hi) < viewMinLon || Math.min(lo, hi) > viewMaxLon) continue;
+    const ahead = highlights.has(f);
+    drawFeature(ctx, f.geometry, project, ahead ? C.aheadFill : C.land, ahead ? C.aheadStroke : C.coast, ahead ? 1.6 : 0.7, cssW * 0.5);
+  }
+
+  // Great-circle path.
+  ctx.beginPath();
+  for (let i = 0; i < pathPts.length; i++) {
+    const [x, y] = project(pathPts[i].lat, pathPts[i].lon);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = C.path;
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([6, 5]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Numbered landfall markers, matching the list order.
+  let landIndex = 0;
+  for (const s of segments) {
+    if (!s.feat) continue;
+    landIndex++;
+    if (s.startKm > 0) {
+      const [x, y] = project(s.startPt.lat, s.startPt.lon);
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = C.aheadStroke;
+      ctx.fill();
+      ctx.fillStyle = "#04201d";
+      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(landIndex), x, y);
+    }
+  }
+
+  // User location on top.
+  const [ux, uy] = project(startLat, startLon);
+  ctx.beginPath();
+  ctx.arc(ux, uy, 6, 0, Math.PI * 2);
+  ctx.fillStyle = C.user;
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = C.userRing;
+  ctx.stroke();
+}
+
 // ---------- init ----------
 
 async function init() {
@@ -488,6 +660,12 @@ async function init() {
   } catch (e) {
     setStatus("Failed to load map data. Check your connection and reload.", true);
   }
+
+  window.addEventListener("resize", () => {
+    if (lastMapArgs) {
+      drawMap(lastMapArgs.startLat, lastMapArgs.startLon, lastMapArgs.heading, lastMapArgs.segments);
+    }
+  });
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
