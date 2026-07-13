@@ -953,9 +953,12 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
   }
   candidates.sort((a, b) => b.area - a.area);
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  // No arbitrary cap on how many countries can be labelled — every visible
+  // country that's big enough to read gets a shot; collision avoidance below
+  // (not this count) is what actually limits clutter.
   let placedNames = 0;
   for (const c of candidates) {
-    if (placedNames >= 16) break;
+    if (placedNames >= 200) break; // sanity bound only, never reached in practice
     const tw = ctx.measureText(c.name).width;
     const x = Math.min(Math.max(c.x, tw / 2 + 3), cssW - tw / 2 - 3);
     const y = Math.min(Math.max(c.y, 9), cssH - 9);
