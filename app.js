@@ -55,6 +55,8 @@ let pendingHeading = null;
 let orientationRaf = null;
 let lastAppliedHeading = null;
 let mapHeading = null; // eased heading the map is currently drawn at
+let mapFramingKm = null; // eased zoom (how far out the map is framed)
+let targetFramingKm = null;
 let mapRaf = null;
 
 // ---------- geometry helpers ----------
@@ -287,7 +289,7 @@ function updateCompassUI(heading) {
 // you hold still).
 function drawMapNow(full) {
   if (!lastMapArgs || mapHeading === null) return;
-  drawMap(lastMapArgs.startLat, lastMapArgs.startLon, mapHeading, lastMapArgs.segments, full !== false);
+  drawMap(lastMapArgs.startLat, lastMapArgs.startLon, mapHeading, lastMapArgs.segments, full !== false, mapFramingKm);
 }
 
 function requestMapSpin() {
@@ -296,17 +298,33 @@ function requestMapSpin() {
   if (mapRaf === null) mapRaf = requestAnimationFrame(spinMap);
 }
 
+// Ease both the rotation and the zoom toward their targets so nothing snaps —
+// when the route re-traces on settle, the framing glides to the new distance
+// instead of jumping.
 function spinMap() {
   mapRaf = null;
   if (!lastMapArgs || currentHeading === null) return;
-  const d = ((currentHeading - mapHeading + 540) % 360) - 180; // shortest turn
-  if (Math.abs(d) < 0.4) {
-    mapHeading = currentHeading;
-    drawMapNow(true); // settled — full draw (all labels)
-    return; // caught up — stop looping
+
+  const dHeading = ((currentHeading - mapHeading + 540) % 360) - 180; // shortest turn
+  const headingSettled = Math.abs(dHeading) < 0.4;
+
+  let framingSettled = true;
+  if (targetFramingKm !== null && mapFramingKm !== null) {
+    const dF = targetFramingKm - mapFramingKm;
+    framingSettled = Math.abs(dF) < Math.max(5, targetFramingKm * 0.01);
+    if (!framingSettled) mapFramingKm += dF * 0.22;
   }
-  mapHeading = (mapHeading + d * 0.3 + 360) % 360; // ease toward the target
-  drawMapNow(false); // mid-turn — light draw (skip the costly label passes)
+
+  if (headingSettled && framingSettled) {
+    mapHeading = currentHeading;
+    if (targetFramingKm !== null) mapFramingKm = targetFramingKm;
+    drawMapNow(true); // settled — full draw (all labels)
+    return;
+  }
+
+  if (!headingSettled) mapHeading = (mapHeading + dHeading * 0.3 + 360) % 360;
+  // Light draw only while actively rotating; a zoom-only glide can afford labels.
+  drawMapNow(headingSettled);
   mapRaf = requestAnimationFrame(spinMap);
 }
 
@@ -553,6 +571,8 @@ function renderResult(startLat, startLon, heading, segments) {
 
   lastMapArgs = { startLat, startLon, segments };
   if (mapHeading === null) mapHeading = heading;
+  targetFramingKm = computeFramingKm(segments);
+  if (mapFramingKm === null) mapFramingKm = targetFramingKm; // no ease on first paint
   els.mapEmpty.hidden = true;
   requestMapSpin();
   drawMapNow(true);
@@ -678,7 +698,18 @@ function drawFeature(ctx, geometry, project, fill, stroke, lineWidth, seamPx) {
 
 // A rough canvas map (no tiles / no network) showing the user, the great-circle
 // path, and the outlines of the countries ahead, highlighted.
-function drawMap(startLat, startLon, heading, segments, full = true) {
+// How far out to frame the map, from the route's farthest point.
+function computeFramingKm(segments) {
+  const anyLand = segments.some((s) => s.feat);
+  let farKm = 0;
+  for (const s of segments) {
+    if (typeof s.startKm === "number") farKm = Math.max(farKm, s.startKm);
+    if (typeof s.endKm === "number") farKm = Math.max(farKm, s.endKm);
+  }
+  return anyLand ? Math.max(farKm, 200) : Math.min(Math.max(farKm, 200), 5000);
+}
+
+function drawMap(startLat, startLon, heading, segments, full = true, framingKm = null) {
   const canvas = els.map;
   const wrap = canvas.parentElement;
   const cssW = wrap.clientWidth;
@@ -693,13 +724,7 @@ function drawMap(startLat, startLon, heading, segments, full = true) {
   const C = mapColors();
 
   const highlights = new Set(segments.filter((s) => s.feat).map((s) => s.feat));
-  let farKm = 0;
-  for (const s of segments) {
-    if (typeof s.startKm === "number") farKm = Math.max(farKm, s.startKm);
-    if (typeof s.endKm === "number") farKm = Math.max(farKm, s.endKm);
-  }
-  const anyLand = highlights.size > 0;
-  const framingKm = anyLand ? Math.max(farKm, 200) : Math.min(Math.max(farKm, 200), 5000);
+  const framing = framingKm != null ? framingKm : computeFramingKm(segments);
 
   // Unwrap longitudes relative to the start so paths/shapes stay continuous
   // across the antimeridian.
@@ -714,7 +739,7 @@ function drawMap(startLat, startLon, heading, segments, full = true) {
   const pathPts = [];
   const N = 160;
   for (let i = 0; i <= N; i++) {
-    pathPts.push(destinationPoint(startLat, startLon, heading, (framingKm * i) / N));
+    pathPts.push(destinationPoint(startLat, startLon, heading, (framing * i) / N));
   }
   const framePts = [{ lat: startLat, lon: startLon }, ...pathPts];
 
