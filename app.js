@@ -668,34 +668,67 @@ function drawMap(startLat, startLon, heading, segments) {
 
   const midLat = (minLat + maxLat) / 2;
   const k = Math.max(0.15, Math.cos(toRad(midLat))); // longitude compression
-  let minX = minLon * k, maxX = maxLon * k;
 
-  // Generous padding so the countries adjacent to the route (and roughly one
-  // ring beyond them) come into view rather than just the ones on the path.
-  const padX = (maxX - minX) * 0.32 || 0.5;
-  const padY = (maxLat - minLat) * 0.32 || 0.5;
-  minX -= padX; maxX += padX; minLat -= padY; maxLat += padY;
+  // Work in a "world" frame (east scaled by k, north up), then rotate it about
+  // the user so the heading points straight up — a heading-up map. The initial
+  // path segment defines "up", so it points up regardless of projection skew.
+  const uwx = unwrap(startLon) * k, uwy = startLat;
+  const p1 = pathPts[1] || pathPts[pathPts.length - 1];
+  const phi = Math.PI / 2 - Math.atan2(p1.lat - uwy, unwrap(p1.lon) * k - uwx);
+  const cosP = Math.cos(phi), sinP = Math.sin(phi);
+  const rot = (wx, wy) => [
+    uwx + (wx - uwx) * cosP - (wy - uwy) * sinP,
+    uwy + (wx - uwx) * sinP + (wy - uwy) * cosP,
+  ];
 
-  const geoW = maxX - minX, geoH = maxLat - minLat;
+  // Fit the rotated frame points (user + path) to the canvas.
+  let minRX = Infinity, maxRX = -Infinity, minRY = Infinity, maxRY = -Infinity;
+  for (const p of framePts) {
+    const [rx, ry] = rot(unwrap(p.lon) * k, p.lat);
+    if (rx < minRX) minRX = rx;
+    if (rx > maxRX) maxRX = rx;
+    if (ry < minRY) minRY = ry;
+    if (ry > maxRY) maxRY = ry;
+  }
+  // Generous padding so adjacent countries (and roughly one ring beyond) show.
+  const padX = (maxRX - minRX) * 0.32 || 0.5;
+  const padY = (maxRY - minRY) * 0.32 || 0.5;
+  minRX -= padX; maxRX += padX; minRY -= padY; maxRY += padY;
+
+  const geoW = maxRX - minRX, geoH = maxRY - minRY;
   const scale = Math.min(cssW / geoW, cssH / geoH);
   const offX = (cssW - geoW * scale) / 2;
   const offY = (cssH - geoH * scale) / 2;
 
-  const project = (lat, lon) => [
-    offX + (unwrap(lon) * k - minX) * scale,
-    offY + (maxLat - lat) * scale,
-  ];
+  const project = (lat, lon) => {
+    const [rx, ry] = rot(unwrap(lon) * k, lat);
+    return [offX + (rx - minRX) * scale, offY + (maxRY - ry) * scale];
+  };
 
   ctx.fillStyle = C.sea;
   ctx.fillRect(0, 0, cssW, cssH);
 
-  const viewMinLon = minX / k, viewMaxLon = maxX / k;
+  // Geographic bounds that enclose the rotated visible area, for culling. Walk
+  // the four canvas corners back through the inverse transform.
+  const invRot = (rx, ry) => [
+    uwx + (rx - uwx) * cosP + (ry - uwy) * sinP,
+    uwy - (rx - uwx) * sinP + (ry - uwy) * cosP,
+  ];
+  let cullMinLon = Infinity, cullMaxLon = -Infinity, cullMinLat = Infinity, cullMaxLat = -Infinity;
+  for (const [sx, sy] of [[0, 0], [cssW, 0], [0, cssH], [cssW, cssH]]) {
+    const [wx, wy] = invRot(minRX + (sx - offX) / scale, maxRY - (sy - offY) / scale);
+    const lon = wx / k, lat = wy;
+    if (lon < cullMinLon) cullMinLon = lon;
+    if (lon > cullMaxLon) cullMaxLon = lon;
+    if (lat < cullMinLat) cullMinLat = lat;
+    if (lat > cullMaxLat) cullMaxLat = lat;
+  }
 
   for (const f of landFeatures) {
     const b = f.bbox;
-    if (b[3] < minLat || b[1] > maxLat) continue;
+    if (b[3] < cullMinLat || b[1] > cullMaxLat) continue;
     const lo = unwrap(b[0]), hi = unwrap(b[2]);
-    if (Math.max(lo, hi) < viewMinLon || Math.min(lo, hi) > viewMaxLon) continue;
+    if (Math.max(lo, hi) < cullMinLon || Math.min(lo, hi) > cullMaxLon) continue;
     const ahead = highlights.has(f);
     drawFeature(ctx, f.geometry, project, ahead ? C.aheadFill : C.land, ahead ? C.aheadStroke : C.coast, ahead ? 1.6 : 0.7, cssW * 0.5);
   }
@@ -806,9 +839,9 @@ function drawMap(startLat, startLon, heading, segments) {
   for (const f of landFeatures) {
     if (!f.name || highlights.has(f)) continue;
     const b = f.bbox;
-    if (b[3] < minLat || b[1] > maxLat) continue;
+    if (b[3] < cullMinLat || b[1] > cullMaxLat) continue;
     const lo = unwrap(b[0]), hi = unwrap(b[2]);
-    if (Math.max(lo, hi) < viewMinLon || Math.min(lo, hi) > viewMaxLon) continue;
+    if (Math.max(lo, hi) < cullMinLon || Math.min(lo, hi) > cullMaxLon) continue;
     const [cx, cy] = project(b[1], b[0]);
     const [dx, dy] = project(b[3], b[2]);
     const onW = Math.abs(dx - cx), onH = Math.abs(dy - cy);
