@@ -32,6 +32,12 @@ html, body {
 
 header { text-align: center; }
 h1 { font-size: 1.2rem; margin: 0; }
+.here {
+  margin: 3px 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+}
 
 /* Compact horizontal compass + readouts, so the map has room. */
 .compass-card {
@@ -314,16 +320,6 @@ h1 { font-size: 1.2rem; margin: 0; }
   font-size: 0.82rem;
 }
 .status:empty { display: none; }
-
-footer {
-  color: var(--text-dim);
-  font-size: 0.78rem;
-}
-footer summary { cursor: pointer; color: var(--text); margin-bottom: 8px; }
-footer ul { padding-left: 18px; }
-footer li { margin-bottom: 6px; }
-.credit { text-align: center; margin-top: 14px; }
-.credit a { color: var(--accent); }
 
 @media (prefers-color-scheme: light) {
   :root {

@@ -19,6 +19,7 @@ const DIRS = [
 const els = {
   enableBtn: document.getElementById("enableBtn"),
   compassRose: document.getElementById("compassRose"),
+  hereReadout: document.getElementById("hereReadout"),
   pointingLabel: document.getElementById("pointingLabel"),
   headingReadout: document.getElementById("headingReadout"),
   locationReadout: document.getElementById("locationReadout"),
@@ -280,6 +281,15 @@ function updateLocationUI() {
   if (!currentPosition) return;
   const { lat, lon } = currentPosition;
   els.locationReadout.textContent = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+  // Where you are now: nearest city and the country you're standing in.
+  if (landFeatures) {
+    const country = findLandAt(lon, lat);
+    const city = nearestCity(lat, lon);
+    const place = country ? country.name : "At sea";
+    els.hereReadout.textContent = city ? `📍 ${city.name}, ${place}` : `📍 ${place}`;
+  }
+
   scheduleLiveScan();
 }
 
@@ -660,8 +670,10 @@ function drawMap(startLat, startLon, heading, segments) {
   const k = Math.max(0.15, Math.cos(toRad(midLat))); // longitude compression
   let minX = minLon * k, maxX = maxLon * k;
 
-  const padX = (maxX - minX) * 0.12 || 0.5;
-  const padY = (maxLat - minLat) * 0.12 || 0.5;
+  // Generous padding so the countries adjacent to the route (and roughly one
+  // ring beyond them) come into view rather than just the ones on the path.
+  const padX = (maxX - minX) * 0.32 || 0.5;
+  const padY = (maxLat - minLat) * 0.32 || 0.5;
   minX -= padX; maxX += padX; minLat -= padY; maxLat += padY;
 
   const geoW = maxX - minX, geoH = maxLat - minLat;
@@ -800,7 +812,7 @@ function drawMap(startLat, startLon, heading, segments) {
     const [cx, cy] = project(b[1], b[0]);
     const [dx, dy] = project(b[3], b[2]);
     const onW = Math.abs(dx - cx), onH = Math.abs(dy - cy);
-    if (Math.min(onW, onH) < 26) continue;
+    if (Math.min(onW, onH) < 20) continue;
     if (!f._label) f._label = labelPoint(f.geometry);
     const [lx, ly] = project(f._label[1], f._label[0]);
     if (lx < 0 || lx > cssW || ly < 0 || ly > cssH) continue;
@@ -810,7 +822,7 @@ function drawMap(startLat, startLon, heading, segments) {
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   let placedNames = 0;
   for (const c of candidates) {
-    if (placedNames >= 8) break;
+    if (placedNames >= 16) break;
     const tw = ctx.measureText(c.name).width;
     const x = Math.min(Math.max(c.x, tw / 2 + 3), cssW - tw / 2 - 3);
     const y = Math.min(Math.max(c.y, 9), cssH - 9);
