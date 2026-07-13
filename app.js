@@ -33,6 +33,7 @@ let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
 let liveTimer = null;
 let lastRendered = { heading: null, lat: null, lon: null };
+let geoWatchId = null;
 
 // ---------- geometry helpers ----------
 
@@ -251,31 +252,45 @@ function updateLocationUI() {
   scheduleLiveScan();
 }
 
+function allowEnableRetry() {
+  els.enableBtn.disabled = false;
+  els.enableBtn.textContent = "Enable Compass & Location";
+}
+
 function startGeolocation() {
   if (!("geolocation" in navigator)) {
     setStatus("Geolocation isn't available in this browser.", true);
     return;
   }
-  navigator.geolocation.watchPosition(
+  // Avoid stacking watchers if the user taps Enable again after an error.
+  if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId = navigator.geolocation.watchPosition(
     (pos) => {
       currentPosition = { lat: pos.coords.latitude, lon: pos.coords.longitude };
       updateLocationUI();
     },
     (err) => {
-      if (err.code === err.PERMISSION_DENIED) {
+      // Use numeric codes rather than the inherited constants so the branch is
+      // robust across engines: 1=denied, 2=unavailable, 3=timeout.
+      if (err.code === 1) {
         setStatus(
-          "Location permission was denied. On iPhone: Settings → Privacy & Security → " +
-            "Location Services must be On, and Safari Websites set to \"While Using\". " +
-            "If you tapped \"Don't Allow\" earlier, Safari remembers it — reload and tap " +
-            "\"aA\" in the address bar → Website Settings → Location → Allow.",
+          "Location permission denied. On iPhone check Settings → Privacy & Security → " +
+            "Location Services is On AND scroll to Safari Websites → set it to \"While Using\" " +
+            "(this is separate from the main switch, and the usual reason it works on iPad but " +
+            "not iPhone). If you tapped \"Don't Allow\" before, clear it via Settings → Safari → " +
+            "Clear History and Website Data, then reload and tap Enable again.",
           true
         );
-      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        allowEnableRetry();
+      } else if (err.code === 2) {
         setStatus("Your location is currently unavailable — try again with a clearer view of the sky.", true);
-      } else if (err.code === err.TIMEOUT) {
-        setStatus("Timed out getting your location. Tap Enable again to retry.", true);
+        allowEnableRetry();
+      } else if (err.code === 3) {
+        setStatus("Timed out getting your location. Tap Enable to retry.", true);
+        allowEnableRetry();
       } else {
         setStatus(`Location error: ${err.message}`, true);
+        allowEnableRetry();
       }
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
