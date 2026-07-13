@@ -1001,6 +1001,10 @@ const COAST_MAX_KM = 55; // treat as "on the coast facing the sea" within this
 function oceanBasin(lat, lon) {
   if (lat <= -60) return "SOUTHERN OCEAN";
   if (lat >= 66) return "Arctic Ocean";
+  // The Mediterranean/Black Sea region has small gulfs (e.g. the Saronic Gulf)
+  // with no named marine polygon at this resolution; without this, those gaps
+  // fall through to the open-ocean basins below and get misclassified.
+  if (lon >= -6 && lon <= 36 && lat >= 30 && lat <= 46) return "Mediterranean Sea";
   const north = lat >= 0;
   // Indian Ocean (Arabian Sea, Bay of Bengal, and south of Indonesia).
   if (lon >= 20 && lon <= 100 && lat <= 30) return "INDIAN OCEAN";
@@ -1021,7 +1025,14 @@ function prettySea(name) {
 
 function seaLifeFor(seaName, lat, lon) {
   if (!sealife) return [];
-  const list = (seaName && sealife.seas[seaName]) || sealife.oceans[oceanBasin(lat, lon)] || [];
+  // oceanBasin() can return either a named sea (e.g. "Mediterranean Sea", for
+  // small gulfs with no marine polygon) or an ocean basin key — check both.
+  const basin = oceanBasin(lat, lon);
+  const list =
+    (seaName && sealife.seas[seaName]) ||
+    sealife.seas[basin] ||
+    sealife.oceans[basin] ||
+    [];
   return list.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
 }
 
