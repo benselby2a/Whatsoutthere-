@@ -6,13 +6,17 @@
 <title>What's Out There?</title>
 <meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="style.css?v=9" />
+<link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
   <main class="app">
+    <div class="statusbar" id="statusbar">
+      <span class="stat"><span class="dot idle" id="dotCompass"></span>Compass</span>
+      <span class="stat"><span class="dot idle" id="dotLocation"></span>Location</span>
+      <span class="stat"><span class="dot idle" id="dotNetwork"></span>Network</span>
+    </div>
     <header>
       <h1>🧭 What's Out There?</h1>
-      <p class="here" id="hereReadout">Enable location to see where you are</p>
     </header>
 
     <section class="compass-card">
@@ -39,14 +43,9 @@
       <div class="map-empty" id="mapEmpty">The map appears here once your location is found.</div>
     </div>
 
-    <details class="result-details" id="resultWrap" hidden>
-      <summary>Route details &amp; distances</summary>
-      <div class="result" id="result"></div>
-    </details>
-
     <p class="status" id="status"></p>
   </main>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

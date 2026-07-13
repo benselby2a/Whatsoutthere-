@@ -4,12 +4,14 @@ const EARTH_RADIUS_KM = 6371;
 const STEP_KM = 12;
 const MAX_KM = 20000;
 const REFINE_ITERATIONS = 9;
-const TARGET_LAND = 3; // how many countries to report along the heading
+const MAX_DESTINATIONS = 3; // countries ahead to look for along the heading
 const KM_PER_MILE = 1.609344;
+const DEST_GAP_KM = 2000 * KM_PER_MILE; // drop a 2nd/3rd dest farther than this past the previous
 const HEADING_EPSILON = 1.5; // deg of change before we re-run the trace
-const LIVE_INTERVAL_MS = 220; // min gap between live recomputes
 const MOVE_EPSILON_KM = 0.5; // location change before we re-run the trace
 const UI_HEADING_EPSILON = 0.5; // deg of change before we touch the compass DOM
+const SETTLE_MS = 200; // wait for the turn to settle before re-tracing the route
+const BIG_DRIFT_DEG = 25; // re-trace immediately once the heading drifts this far
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -19,16 +21,23 @@ const DIRS = [
 const els = {
   enableBtn: document.getElementById("enableBtn"),
   compassRose: document.getElementById("compassRose"),
-  hereReadout: document.getElementById("hereReadout"),
   pointingLabel: document.getElementById("pointingLabel"),
   headingReadout: document.getElementById("headingReadout"),
   locationReadout: document.getElementById("locationReadout"),
-  result: document.getElementById("result"),
-  resultWrap: document.getElementById("resultWrap"),
   status: document.getElementById("status"),
   map: document.getElementById("map"),
   mapEmpty: document.getElementById("mapEmpty"),
+  dotCompass: document.getElementById("dotCompass"),
+  dotLocation: document.getElementById("dotLocation"),
+  dotNetwork: document.getElementById("dotNetwork"),
 };
+
+let compassGotReading = false;
+
+function setPermStatus(kind, state) {
+  const dot = kind === "compass" ? els.dotCompass : kind === "location" ? els.dotLocation : els.dotNetwork;
+  if (dot) dot.className = "dot " + state;
+}
 
 let landFeatures = null;
 let marineFeatures = null;
@@ -174,6 +183,32 @@ function nearestCity(lat, lon) {
   return best ? { name: best.n, country: best.c, distKm: bestDist } : null;
 }
 
+// Distance from a point to a lon/lat bounding box (0 if inside) — a cheap lower
+// bound used to skip far countries when finding the nearest one.
+function distToBBoxKm(lat, lon, b) {
+  const clampLon = Math.max(b[0], Math.min(lon, b[2]));
+  const clampLat = Math.max(b[1], Math.min(lat, b[3]));
+  return haversineKm(lat, lon, clampLat, clampLon);
+}
+
+// Nearest country to a point (used when you're at sea). Approximated by the
+// closest polygon vertex, with a bbox pre-filter so it stays fast.
+function nearestCountry(lat, lon) {
+  let best = null, bestDist = Infinity;
+  for (const f of landFeatures) {
+    if (distToBBoxKm(lat, lon, f.bbox) >= bestDist) continue;
+    const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const rings of polys) {
+      const ring = rings[0];
+      for (let i = 0; i < ring.length; i++) {
+        const d = haversineKm(lat, lon, ring[i][1], ring[i][0]);
+        if (d < bestDist) { bestDist = d; best = f; }
+      }
+    }
+  }
+  return best;
+}
+
 function cardinal(deg) {
   return DIRS[Math.round(deg / 22.5) % 16];
 }
@@ -250,9 +285,9 @@ function updateCompassUI(heading) {
 // to the throttled scan; here we only ease the rotation and redraw, running an
 // rAF loop while turning and stopping once it has caught up (so it's idle when
 // you hold still).
-function drawMapNow() {
+function drawMapNow(full) {
   if (!lastMapArgs || mapHeading === null) return;
-  drawMap(lastMapArgs.startLat, lastMapArgs.startLon, mapHeading, lastMapArgs.segments);
+  drawMap(lastMapArgs.startLat, lastMapArgs.startLon, mapHeading, lastMapArgs.segments, full !== false);
 }
 
 function requestMapSpin() {
@@ -267,11 +302,11 @@ function spinMap() {
   const d = ((currentHeading - mapHeading + 540) % 360) - 180; // shortest turn
   if (Math.abs(d) < 0.4) {
     mapHeading = currentHeading;
-    drawMapNow();
+    drawMapNow(true); // settled — full draw (all labels)
     return; // caught up — stop looping
   }
   mapHeading = (mapHeading + d * 0.3 + 360) % 360; // ease toward the target
-  drawMapNow();
+  drawMapNow(false); // mid-turn — light draw (skip the costly label passes)
   mapRaf = requestAnimationFrame(spinMap);
 }
 
@@ -288,6 +323,7 @@ function handleOrientation(event) {
     return;
   }
   pendingHeading = (heading + 360) % 360;
+  if (!compassGotReading) { compassGotReading = true; setPermStatus("compass", "ok"); }
   if (orientationRaf === null) orientationRaf = requestAnimationFrame(applyPendingHeading);
 }
 
@@ -312,15 +348,20 @@ function removeOrientationListener() {
 function updateLocationUI() {
   if (!currentPosition) return;
   const { lat, lon } = currentPosition;
-  els.locationReadout.textContent = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  setPermStatus("location", "ok");
 
-  // Where you are now: nearest city and the country you're standing in.
+  // Show the current place (city + country) right next to the coordinates. If
+  // you're at sea, use the nearest country instead of "at sea".
+  let place = "";
   if (landFeatures) {
     const country = findLandAt(lon, lat);
     const city = nearestCity(lat, lon);
-    const place = country ? country.name : "At sea";
-    els.hereReadout.textContent = city ? `📍 ${city.name}, ${place}` : `📍 ${place}`;
+    let cname;
+    if (country) cname = country.name;
+    else { const nc = nearestCountry(lat, lon); cname = nc ? `near ${nc.name}` : "at sea"; }
+    place = city ? `${city.name}, ${cname}` : cname;
   }
+  els.locationReadout.textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)}${place ? " · " + place : ""}`;
 
   scheduleLiveScan();
 }
@@ -346,6 +387,7 @@ function startGeolocation() {
       // Use numeric codes rather than the inherited constants so the branch is
       // robust across engines: 1=denied, 2=unavailable, 3=timeout.
       if (err.code === 1) {
+        setPermStatus("location", "err");
         setStatus(
           "Location permission denied. On iPhone check Settings → Privacy & Security → " +
             "Location Services is On AND scroll to Safari Websites → set it to \"While Using\" " +
@@ -356,12 +398,15 @@ function startGeolocation() {
         );
         allowEnableRetry();
       } else if (err.code === 2) {
+        setPermStatus("location", "warn");
         setStatus("Your location is currently unavailable — try again with a clearer view of the sky.", true);
         allowEnableRetry();
       } else if (err.code === 3) {
+        setPermStatus("location", "warn");
         setStatus("Timed out getting your location. Tap Enable to retry.", true);
         allowEnableRetry();
       } else {
+        setPermStatus("location", "err");
         setStatus(`Location error: ${err.message}`, true);
         allowEnableRetry();
       }
@@ -375,14 +420,21 @@ function startGeolocation() {
 
 async function startOrientation() {
   const DOE = window.DeviceOrientationEvent;
-  if (DOE && typeof DOE.requestPermission === "function") {
+  if (!DOE) {
+    setPermStatus("compass", "err");
+    setStatus("This browser doesn't provide a compass.", true);
+    return;
+  }
+  if (typeof DOE.requestPermission === "function") {
     try {
       const result = await DOE.requestPermission();
       if (result !== "granted") {
+        setPermStatus("compass", "err");
         setStatus("Compass permission was not granted.", true);
         return;
       }
     } catch (e) {
+      setPermStatus("compass", "err");
       setStatus(`Compass permission error: ${e.message}`, true);
       return;
     }
@@ -427,12 +479,12 @@ function refineBoundary(startLat, startLon, heading, target, loKm, hiKm) {
 }
 
 // Walk outward and record the ordered sequence of land/sea segments until we've
-// crossed TARGET_LAND distinct countries (the one you're on counts as the first).
+// reached MAX_DESTINATIONS countries after leaving the one you're standing on.
 function traceRoute(startLat, startLon, heading) {
   let openFeat = findLandAt(startLon, startLat);
   let open = { feat: openFeat, startKm: 0, startPt: { lat: startLat, lon: startLon } };
   const segments = [];
-  let landOpened = openFeat ? 1 : 0;
+  let destOpened = 0;
   let truncated = true;
 
   for (let d = STEP_KM; d <= MAX_KM; d += STEP_KM) {
@@ -447,9 +499,8 @@ function traceRoute(startLat, startLon, heading) {
       open = { feat, startKm: boundary, startPt: boundaryPt };
 
       if (feat) {
-        landOpened++;
-        if (landOpened >= TARGET_LAND) {
-          // We've just entered the final country to report; landfall is enough.
+        destOpened++; // any land opened after a transition is a destination
+        if (destOpened >= MAX_DESTINATIONS) {
           segments.push(open);
           truncated = false;
           break;
@@ -467,87 +518,63 @@ function traceRoute(startLat, startLon, heading) {
   return segments;
 }
 
+// Always keep the 1st destination; drop the 2nd/3rd (and everything after) once
+// one lands more than DEST_GAP_KM beyond the previous kept destination.
+function trimSegments(segments) {
+  const out = [];
+  let destCount = 0, prevKm = null;
+  const pendingSeas = [];
+  for (const seg of segments) {
+    if (seg.feat && seg.startKm === 0) {
+      out.push(seg); // the country you're standing on
+    } else if (seg.feat) {
+      destCount++;
+      if (destCount > 1 && seg.startKm - prevKm > DEST_GAP_KM) break; // too far — stop here
+      out.push(...pendingSeas.splice(0), seg);
+      prevKm = seg.startKm;
+    } else {
+      pendingSeas.push(seg); // hold seas until we know the next dest is kept
+    }
+  }
+  return out;
+}
+
 // ---------- rendering ----------
 
 function renderResult(startLat, startLon, heading, segments) {
-  els.resultWrap.hidden = false;
-  els.result.classList.remove("error");
+  // Cache the nearest city per destination so the per-frame map draw doesn't
+  // have to rescan every city while the map is spinning.
+  for (const seg of segments) {
+    if (seg.feat && seg.startKm > 0 && seg.cityName === undefined) {
+      const c = nearestCity(seg.startPt.lat, seg.startPt.lon);
+      seg.cityName = c ? c.name : "";
+    }
+  }
 
   lastMapArgs = { startLat, startLon, segments };
   if (mapHeading === null) mapHeading = heading;
   els.mapEmpty.hidden = true;
   requestMapSpin();
-  drawMapNow();
+  drawMapNow(true);
 
-  const landCount = segments.filter((s) => s.feat).length;
-  if (landCount === 0) {
-    els.result.classList.add("error");
-    els.result.innerHTML = `
-      <h2>Nothing but open water</h2>
-      <p>No land within ${dist(MAX_KM)} along ${Math.round(heading)}° ${cardinal(heading)} — you're looking out across open ocean.</p>
-    `;
-    return;
-  }
-
-  const items = [];
-  let landIndex = 0;
-
-  for (const seg of segments) {
-    if (seg.feat) {
-      landIndex++;
-      const city = nearestCity(seg.startPt.lat, seg.startPt.lon);
-      const cityLine = city
-        ? `Nearest city: <strong>${city.name}</strong>${city.country && city.country !== seg.feat.name ? ` (${city.country})` : ""} · ${dist(city.distKm)} away`
-        : "";
-
-      let where;
-      if (seg.startKm === 0) {
-        // The landmass you're standing on.
-        where = seg.truncated
-          ? `You're here — coastline more than ${dist(seg.endKm)} ahead`
-          : `You're here — leaving in about ${dist(seg.endKm)}`;
-      } else {
-        where = `Landfall at about ${dist(seg.startKm)}`;
-      }
-
-      items.push(`
-        <li class="route-land">
-          <div class="route-num">${landIndex}</div>
-          <div class="route-body">
-            <div class="route-name">${seg.feat.name || "Unnamed land"}</div>
-            <div class="route-sub">${where}</div>
-            ${cityLine ? `<div class="route-city">${cityLine}</div>` : ""}
-          </div>
-        </li>
-      `);
-    } else if (seg.startKm > 0 || seg.endKm !== undefined) {
-      // A stretch of sea between landmasses (skip a trailing open-ended one).
-      if (seg.endKm === undefined) continue;
-      const midKm = (seg.startKm + seg.endKm) / 2;
-      const midPt = destinationPoint(startLat, startLon, heading, midKm);
-      const name = seaNameAt(midPt.lon, midPt.lat) || "Open sea";
-      items.push(`
-        <li class="route-sea">
-          <span class="route-sea-name">🌊 ${name}</span>
-          <span class="route-sea-width">from ${dist(seg.startKm)}</span>
-        </li>
-      `);
-    }
-  }
-
-  els.result.innerHTML = `
-    <h2>Heading ${Math.round(heading)}° ${cardinal(heading)}<span class="live-badge"><span class="live-dot"></span>Live</span></h2>
-    <p class="result-lead">Crossings from your location, in order:</p>
-    <ol class="route">${items.join("")}</ol>
-  `;
+  const hasLand = segments.some((s) => s.feat && s.startKm > 0);
+  setStatus(hasLand ? "" : `Open ocean — no land within range facing ${cardinal(heading)}.`);
 }
 
-// Recompute + render, but only when the heading or position has actually moved
-// enough to matter, and no more often than LIVE_INTERVAL_MS.
+// Re-trace the route only when the turn has settled (a debounce), so the heavy
+// work doesn't hitch the smooth rotation. If the heading has drifted a long way
+// from the last trace, re-trace at once so the route isn't badly stale.
 function scheduleLiveScan() {
   if (currentHeading === null || !currentPosition || !landFeatures) return;
-  if (liveTimer !== null) return;
-  liveTimer = setTimeout(runLiveScan, LIVE_INTERVAL_MS);
+  if (lastMapArgs === null) { if (liveTimer !== null) { clearTimeout(liveTimer); liveTimer = null; } runLiveScan(); return; }
+  const bigDrift = lastRendered.heading !== null && angleDelta(currentHeading, lastRendered.heading) >= BIG_DRIFT_DEG;
+  if (bigDrift) {
+    if (liveTimer !== null) { clearTimeout(liveTimer); liveTimer = null; }
+    runLiveScan();
+    return;
+  }
+  if (liveTimer !== null) clearTimeout(liveTimer);
+  liveTimer = setTimeout(runLiveScan, SETTLE_MS);
 }
 
 function runLiveScan() {
@@ -566,10 +593,9 @@ function runLiveScan() {
   if (!turned && !moved) return;
 
   try {
-    const segments = traceRoute(lat, lon, heading);
+    const segments = trimSegments(traceRoute(lat, lon, heading));
     renderResult(lat, lon, heading, segments);
     lastRendered = { heading, lat, lon };
-    setStatus("");
   } catch (e) {
     setStatus(`Something went wrong: ${e.message}`, true);
   }
@@ -652,7 +678,7 @@ function drawFeature(ctx, geometry, project, fill, stroke, lineWidth, seamPx) {
 
 // A rough canvas map (no tiles / no network) showing the user, the great-circle
 // path, and the outlines of the countries ahead, highlighted.
-function drawMap(startLat, startLon, heading, segments) {
+function drawMap(startLat, startLon, heading, segments, full = true) {
   const canvas = els.map;
   const wrap = canvas.parentElement;
   const cssW = wrap.clientWidth;
@@ -825,17 +851,16 @@ function drawMap(startLat, startLon, heading, segments) {
   };
 
   const [ux, uy] = project(startLat, startLon);
-  let landIndex = 0;
+  let destIndex = 0;
   let startFeat = null;
   for (const s of segments) {
     if (!s.feat) continue;
-    landIndex++;
     if (s.startKm > 0) {
+      destIndex++;
       const [x, y] = project(s.startPt.lat, s.startPt.lon);
-      const city = nearestCity(s.startPt.lat, s.startPt.lon);
       drawCallout(x, y, [
-        { text: `${landIndex}. ${s.feat.name}`, font: fontName, color: C.labelAhead },
-        { text: `${miles(s.startKm)}${city ? " · " + city.name : ""}`, font: fontSub, color: C.labelText },
+        { text: `${destIndex}. ${s.feat.name}`, font: fontName, color: C.labelAhead },
+        { text: `${miles(s.startKm)}${s.cityName ? " · " + s.cityName : ""}`, font: fontSub, color: C.labelText },
       ], C.aheadStroke);
     } else {
       startFeat = s.feat;
@@ -848,6 +873,9 @@ function drawMap(startLat, startLon, heading, segments) {
     ], C.user);
   }
 
+  // Sea names + neighbour labels are the costly passes (many measureText +
+  // collision checks); skip them on the light mid-turn frames.
+  if (full) {
   // Sea names along the path.
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.font = "italic 600 10px -apple-system, BlinkMacSystemFont, sans-serif";
@@ -902,23 +930,22 @@ function drawMap(startLat, startLon, heading, segments) {
     ctx.lineWidth = 3; ctx.strokeStyle = C.labelHalo; ctx.strokeText(c.name, x, y);
     ctx.fillStyle = C.labelText; ctx.fillText(c.name, x, y);
   }
+  } // end if (full)
 
   // Numbered landfall markers + the user dot, drawn last so they stay visible.
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  let li = 0;
+  let markerIndex = 0;
   for (const s of segments) {
-    if (!s.feat) continue;
-    li++;
-    if (s.startKm > 0) {
-      const [x, y] = project(s.startPt.lat, s.startPt.lon);
-      ctx.beginPath();
-      ctx.arc(x, y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = C.aheadStroke; ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = C.userRing; ctx.stroke();
-      ctx.fillStyle = "#04201d";
-      ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, sans-serif";
-      ctx.fillText(String(li), x, y);
-    }
+    if (!s.feat || s.startKm === 0) continue;
+    markerIndex++;
+    const [x, y] = project(s.startPt.lat, s.startPt.lon);
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = C.aheadStroke; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = C.userRing; ctx.stroke();
+    ctx.fillStyle = "#04201d";
+    ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, sans-serif";
+    ctx.fillText(String(markerIndex), x, y);
   }
   ctx.beginPath();
   ctx.arc(ux, uy, 6, 0, Math.PI * 2);
@@ -929,6 +956,15 @@ function drawMap(startLat, startLon, heading, segments) {
 // ---------- init ----------
 
 async function init() {
+  // Traffic-light statuses: network reflects connectivity now; compass and
+  // location stay idle (grey) until you enable the sensors.
+  const applyNetwork = () => setPermStatus("network", navigator.onLine === false ? "err" : "ok");
+  applyNetwork();
+  window.addEventListener("online", applyNetwork);
+  window.addEventListener("offline", applyNetwork);
+  setPermStatus("compass", "idle");
+  setPermStatus("location", "geolocation" in navigator ? "idle" : "err");
+
   setStatus("Loading map data…");
   try {
     await loadData();
@@ -946,6 +982,8 @@ async function init() {
     els.enableBtn.textContent = "Sensors enabled";
     els.pointingLabel.textContent = "Move your device to wake the compass";
     setStatus("Waiting for compass and GPS…");
+    setPermStatus("compass", "warn");
+    setPermStatus("location", "warn");
     sensorsOn = true;
     // Kick off BOTH permission requests synchronously, while we still have the
     // user activation from this tap. iOS Safari (iPhone especially) denies a
