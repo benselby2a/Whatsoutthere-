@@ -45,6 +45,8 @@ let orientationGranted = false;
 let pendingHeading = null;
 let orientationRaf = null;
 let lastAppliedHeading = null;
+let mapHeading = null; // eased heading the map is currently drawn at
+let mapRaf = null;
 
 // ---------- geometry helpers ----------
 
@@ -241,6 +243,36 @@ function updateCompassUI(heading) {
   els.headingReadout.textContent = `${Math.round(heading)}° ${cardinal(heading)}`;
   els.pointingLabel.textContent = `Facing ${cardinalWords(heading)}`;
   scheduleLiveScan();
+  requestMapSpin();
+}
+
+// Smoothly rotate the map toward the live heading. The heavy route/text is left
+// to the throttled scan; here we only ease the rotation and redraw, running an
+// rAF loop while turning and stopping once it has caught up (so it's idle when
+// you hold still).
+function drawMapNow() {
+  if (!lastMapArgs || mapHeading === null) return;
+  drawMap(lastMapArgs.startLat, lastMapArgs.startLon, mapHeading, lastMapArgs.segments);
+}
+
+function requestMapSpin() {
+  if (!lastMapArgs || currentHeading === null) return;
+  if (mapHeading === null) mapHeading = currentHeading;
+  if (mapRaf === null) mapRaf = requestAnimationFrame(spinMap);
+}
+
+function spinMap() {
+  mapRaf = null;
+  if (!lastMapArgs || currentHeading === null) return;
+  const d = ((currentHeading - mapHeading + 540) % 360) - 180; // shortest turn
+  if (Math.abs(d) < 0.4) {
+    mapHeading = currentHeading;
+    drawMapNow();
+    return; // caught up — stop looping
+  }
+  mapHeading = (mapHeading + d * 0.3 + 360) % 360; // ease toward the target
+  drawMapNow();
+  mapRaf = requestAnimationFrame(spinMap);
 }
 
 // Orientation events fire ~60×/s. Rather than touch the DOM on every one, stash
@@ -370,6 +402,7 @@ function setSensorsActive(active) {
     removeOrientationListener();
     if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
     if (liveTimer !== null) { clearTimeout(liveTimer); liveTimer = null; }
+    if (mapRaf !== null) { cancelAnimationFrame(mapRaf); mapRaf = null; }
   }
 }
 
@@ -440,9 +473,11 @@ function renderResult(startLat, startLon, heading, segments) {
   els.resultWrap.hidden = false;
   els.result.classList.remove("error");
 
-  drawMap(startLat, startLon, heading, segments);
-  lastMapArgs = { startLat, startLon, heading, segments };
+  lastMapArgs = { startLat, startLon, segments };
+  if (mapHeading === null) mapHeading = heading;
   els.mapEmpty.hidden = true;
+  requestMapSpin();
+  drawMapNow();
 
   const landCount = segments.filter((s) => s.feat).length;
   if (landCount === 0) {
@@ -902,11 +937,7 @@ async function init() {
     setStatus("Failed to load map data. Check your connection and reload.", true);
   }
 
-  window.addEventListener("resize", () => {
-    if (lastMapArgs) {
-      drawMap(lastMapArgs.startLat, lastMapArgs.startLon, lastMapArgs.heading, lastMapArgs.segments);
-    }
-  });
+  window.addEventListener("resize", drawMapNow);
 
   document.addEventListener("visibilitychange", () => setSensorsActive(!document.hidden));
 
