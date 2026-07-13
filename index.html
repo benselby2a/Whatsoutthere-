@@ -6,7 +6,7 @@
 <title>What's Out There?</title>
 <meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
   <main class="app">
@@ -38,7 +38,10 @@
       <div class="map-empty" id="mapEmpty">The map appears here once your location is found.</div>
     </div>
 
-    <section class="result" id="result" hidden></section>
+    <details class="result-details" id="resultWrap" hidden>
+      <summary>Route details &amp; distances</summary>
+      <div class="result" id="result"></div>
+    </details>
 
     <p class="status" id="status"></p>
 
@@ -53,12 +56,13 @@
           <li>Countries are sovereign states from Natural Earth, so the UK shows as "United Kingdom" rather than "England", etc.</li>
           <li>Landmass detection uses a simplified world coastline (Natural Earth 110m). Small islands or narrow spits of land may be missed.</li>
           <li>The map is drawn from the same bundled coastline data on a plain canvas &mdash; no map tiles or external services &mdash; so it's a rough outline, not a street map.</li>
+          <li>To save battery it uses low-power (coarse) location, only redraws when your heading actually changes, and pauses the sensors whenever the page isn't on screen.</li>
         </ul>
       </details>
       <p class="credit">Data: <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a> &middot; No backend, hosted on GitHub Pages.</p>
     </footer>
   </main>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

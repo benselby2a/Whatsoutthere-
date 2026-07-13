@@ -7,8 +7,9 @@ const REFINE_ITERATIONS = 9;
 const TARGET_LAND = 3; // how many countries to report along the heading
 const KM_PER_MILE = 1.609344;
 const HEADING_EPSILON = 1.5; // deg of change before we re-run the trace
-const LIVE_INTERVAL_MS = 180; // min gap between live recomputes
+const LIVE_INTERVAL_MS = 220; // min gap between live recomputes
 const MOVE_EPSILON_KM = 0.5; // location change before we re-run the trace
+const UI_HEADING_EPSILON = 0.5; // deg of change before we touch the compass DOM
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -22,6 +23,7 @@ const els = {
   headingReadout: document.getElementById("headingReadout"),
   locationReadout: document.getElementById("locationReadout"),
   result: document.getElementById("result"),
+  resultWrap: document.getElementById("resultWrap"),
   status: document.getElementById("status"),
   map: document.getElementById("map"),
   mapEmpty: document.getElementById("mapEmpty"),
@@ -37,6 +39,11 @@ let liveTimer = null;
 let lastRendered = { heading: null, lat: null, lon: null };
 let geoWatchId = null;
 let lastMapArgs = null;
+let sensorsOn = false; // user has tapped Enable
+let orientationGranted = false;
+let pendingHeading = null;
+let orientationRaf = null;
+let lastAppliedHeading = null;
 
 // ---------- geometry helpers ----------
 
@@ -235,6 +242,9 @@ function updateCompassUI(heading) {
   scheduleLiveScan();
 }
 
+// Orientation events fire ~60×/s. Rather than touch the DOM on every one, stash
+// the latest heading and apply it at most once per animation frame — and skip
+// sub-half-degree jitter entirely. Much less main-thread work and repainting.
 function handleOrientation(event) {
   let heading;
   if (typeof event.webkitCompassHeading === "number" && !Number.isNaN(event.webkitCompassHeading)) {
@@ -244,8 +254,26 @@ function handleOrientation(event) {
   } else {
     return;
   }
-  heading = (heading + 360) % 360;
-  updateCompassUI(heading);
+  pendingHeading = (heading + 360) % 360;
+  if (orientationRaf === null) orientationRaf = requestAnimationFrame(applyPendingHeading);
+}
+
+function applyPendingHeading() {
+  orientationRaf = null;
+  if (pendingHeading === null) return;
+  if (lastAppliedHeading !== null && angleDelta(pendingHeading, lastAppliedHeading) < UI_HEADING_EPSILON) return;
+  lastAppliedHeading = pendingHeading;
+  updateCompassUI(pendingHeading);
+}
+
+function addOrientationListener() {
+  window.removeEventListener("deviceorientation", handleOrientation, true);
+  window.addEventListener("deviceorientation", handleOrientation, true);
+}
+
+function removeOrientationListener() {
+  window.removeEventListener("deviceorientation", handleOrientation, true);
+  if (orientationRaf !== null) { cancelAnimationFrame(orientationRaf); orientationRaf = null; }
 }
 
 function updateLocationUI() {
@@ -296,7 +324,10 @@ function startGeolocation() {
         allowEnableRetry();
       }
     },
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    // Low-power location: coarse accuracy is plenty for "which country is that
+    // way", and it lets the OS avoid keeping the GPS radio hot. Cached fixes up
+    // to a minute old are fine since you're pointing from roughly one spot.
+    { enableHighAccuracy: false, maximumAge: 60000, timeout: 20000 }
   );
 }
 
@@ -314,7 +345,22 @@ async function startOrientation() {
       return;
     }
   }
-  window.addEventListener("deviceorientation", handleOrientation, true);
+  orientationGranted = true;
+  addOrientationListener();
+}
+
+// Stop / resume the sensors when the page is backgrounded, so it isn't draining
+// the battery while it's not on screen.
+function setSensorsActive(active) {
+  if (!sensorsOn) return;
+  if (active) {
+    if (orientationGranted) addOrientationListener();
+    startGeolocation();
+  } else {
+    removeOrientationListener();
+    if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+    if (liveTimer !== null) { clearTimeout(liveTimer); liveTimer = null; }
+  }
 }
 
 function setStatus(text, isError) {
@@ -381,7 +427,7 @@ function traceRoute(startLat, startLon, heading) {
 // ---------- rendering ----------
 
 function renderResult(startLat, startLon, heading, segments) {
-  els.result.hidden = false;
+  els.resultWrap.hidden = false;
   els.result.classList.remove("error");
 
   drawMap(startLat, startLon, heading, segments);
@@ -489,8 +535,8 @@ function runLiveScan() {
 function mapColors() {
   const dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
-    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)" }
-    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)" };
+    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)", panelBg: "rgba(9,15,28,0.86)", labelStart: "#ffd9a8", seaLabel: "#93a6cc" }
+    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)", panelBg: "rgba(255,255,255,0.9)", labelStart: "#8a4b12", seaLabel: "#5a6b8f" };
 }
 
 // Area-weighted centroid of a ring (falls back to the vertex average for
@@ -655,14 +701,98 @@ function drawMap(startLat, startLon, heading, segments) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Country name labels, biggest-in-view first (and countries ahead prioritised),
-  // skipping ones too small to label or that would collide with a placed label.
+  // ---- Annotations: destination callouts (country + cumulative distance +
+  // nearest city), a "you are here" callout, sea names, then neighbour names. ----
+  const placed = [];
+  const LH = 13;
+  const fontName = "700 11px -apple-system, BlinkMacSystemFont, sans-serif";
+  const fontSub = "500 10px -apple-system, BlinkMacSystemFont, sans-serif";
+
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  };
+
+  const drawCallout = (anchorX, anchorY, lines, borderColor) => {
+    let w = 0;
+    for (const ln of lines) { ctx.font = ln.font; w = Math.max(w, ctx.measureText(ln.text).width); }
+    const padX = 6, padY = 5;
+    const boxW = w + padX * 2, boxH = lines.length * LH + padY * 2;
+    let bx = anchorX + 12;
+    if (bx + boxW > cssW - 2) bx = anchorX - 12 - boxW; // flip to the left edge
+    let by = anchorY - boxH / 2;
+    bx = Math.min(Math.max(bx, 2), cssW - boxW - 2);
+    by = Math.min(Math.max(by, 2), cssH - boxH - 2);
+    for (let t = 0; t < 6; t++) { // nudge down past already-placed boxes
+      let hit = false;
+      for (const p of placed) {
+        if (!(bx + boxW < p[0] || bx > p[2] || by + boxH < p[1] || by > p[3])) { hit = true; by = Math.min(p[3] + 3, cssH - boxH - 2); break; }
+      }
+      if (!hit) break;
+    }
+    placed.push([bx, by, bx + boxW, by + boxH]);
+    roundRect(bx, by, boxW, boxH, 6);
+    ctx.fillStyle = C.panelBg; ctx.fill();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = borderColor; ctx.stroke();
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    let ty = by + padY + LH / 2;
+    for (const ln of lines) { ctx.font = ln.font; ctx.fillStyle = ln.color; ctx.fillText(ln.text, bx + padX, ty); ty += LH; }
+  };
+
+  const [ux, uy] = project(startLat, startLon);
+  let landIndex = 0;
+  let startFeat = null;
+  for (const s of segments) {
+    if (!s.feat) continue;
+    landIndex++;
+    if (s.startKm > 0) {
+      const [x, y] = project(s.startPt.lat, s.startPt.lon);
+      const city = nearestCity(s.startPt.lat, s.startPt.lon);
+      drawCallout(x, y, [
+        { text: `${landIndex}. ${s.feat.name}`, font: fontName, color: C.labelAhead },
+        { text: `${miles(s.startKm)}${city ? " · " + city.name : ""}`, font: fontSub, color: C.labelText },
+      ], C.aheadStroke);
+    } else {
+      startFeat = s.feat;
+    }
+  }
+  if (startFeat) {
+    drawCallout(ux, uy, [
+      { text: startFeat.name, font: fontName, color: C.labelStart },
+      { text: "You are here", font: fontSub, color: C.labelText },
+    ], C.user);
+  }
+
+  // Sea names along the path.
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "italic 600 10px -apple-system, BlinkMacSystemFont, sans-serif";
+  for (const s of segments) {
+    if (s.feat || s.endKm === undefined) continue;
+    const midKm = (s.startKm + s.endKm) / 2;
+    const mp = destinationPoint(startLat, startLon, heading, midKm);
+    const name = seaNameAt(mp.lon, mp.lat) || "Open sea";
+    const [x, y] = project(mp.lat, mp.lon);
+    if (x < 0 || x > cssW || y < 0 || y > cssH) continue;
+    const tw = ctx.measureText(name).width;
+    const box = [x - tw / 2 - 2, y - 8, x + tw / 2 + 2, y + 8];
+    let overlap = false;
+    for (const p of placed) { if (!(box[2] < p[0] || box[0] > p[2] || box[3] < p[1] || box[1] > p[3])) { overlap = true; break; } }
+    if (overlap) continue;
+    placed.push(box);
+    ctx.lineWidth = 3; ctx.strokeStyle = C.labelHalo; ctx.strokeText(name, x, y);
+    ctx.fillStyle = C.seaLabel; ctx.fillText(name, x, y);
+  }
+
+  // Neighbour country names (the ones ahead already have callouts).
   ctx.font = "600 11px -apple-system, BlinkMacSystemFont, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
   const candidates = [];
   for (const f of landFeatures) {
-    if (!f.name) continue;
+    if (!f.name || highlights.has(f)) continue;
     const b = f.bbox;
     if (b[3] < minLat || b[1] > maxLat) continue;
     const lo = unwrap(b[0]), hi = unwrap(b[2]);
@@ -670,63 +800,50 @@ function drawMap(startLat, startLon, heading, segments) {
     const [cx, cy] = project(b[1], b[0]);
     const [dx, dy] = project(b[3], b[2]);
     const onW = Math.abs(dx - cx), onH = Math.abs(dy - cy);
-    if (Math.min(onW, onH) < 26) continue; // too small to label
+    if (Math.min(onW, onH) < 26) continue;
     if (!f._label) f._label = labelPoint(f.geometry);
     const [lx, ly] = project(f._label[1], f._label[0]);
     if (lx < 0 || lx > cssW || ly < 0 || ly > cssH) continue;
-    candidates.push({ name: f.name, x: lx, y: ly, area: onW * onH, ahead: highlights.has(f) });
+    candidates.push({ name: f.name, x: lx, y: ly, area: onW * onH });
   }
-  candidates.sort((a, b) => (a.ahead === b.ahead ? b.area - a.area : a.ahead ? -1 : 1));
-
-  const placed = [];
+  candidates.sort((a, b) => b.area - a.area);
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  let placedNames = 0;
   for (const c of candidates) {
-    if (placed.length >= 12) break;
+    if (placedNames >= 8) break;
     const tw = ctx.measureText(c.name).width;
-    // Keep the whole label on-canvas so edge countries don't clip.
     const x = Math.min(Math.max(c.x, tw / 2 + 3), cssW - tw / 2 - 3);
     const y = Math.min(Math.max(c.y, 9), cssH - 9);
     const box = [x - tw / 2 - 2, y - 8, x + tw / 2 + 2, y + 8];
     let overlap = false;
-    for (const p of placed) {
-      if (!(box[2] < p[0] || box[0] > p[2] || box[3] < p[1] || box[1] > p[3])) { overlap = true; break; }
-    }
+    for (const p of placed) { if (!(box[2] < p[0] || box[0] > p[2] || box[3] < p[1] || box[1] > p[3])) { overlap = true; break; } }
     if (overlap) continue;
-    placed.push(box);
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = C.labelHalo;
-    ctx.strokeText(c.name, x, y);
-    ctx.fillStyle = c.ahead ? C.labelAhead : C.labelText;
-    ctx.fillText(c.name, x, y);
+    placed.push(box); placedNames++;
+    ctx.lineWidth = 3; ctx.strokeStyle = C.labelHalo; ctx.strokeText(c.name, x, y);
+    ctx.fillStyle = C.labelText; ctx.fillText(c.name, x, y);
   }
 
-  // Numbered landfall markers, matching the list order.
-  let landIndex = 0;
+  // Numbered landfall markers + the user dot, drawn last so they stay visible.
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  let li = 0;
   for (const s of segments) {
     if (!s.feat) continue;
-    landIndex++;
+    li++;
     if (s.startKm > 0) {
       const [x, y] = project(s.startPt.lat, s.startPt.lon);
       ctx.beginPath();
       ctx.arc(x, y, 8, 0, Math.PI * 2);
-      ctx.fillStyle = C.aheadStroke;
-      ctx.fill();
+      ctx.fillStyle = C.aheadStroke; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = C.userRing; ctx.stroke();
       ctx.fillStyle = "#04201d";
       ctx.font = "bold 10px -apple-system, BlinkMacSystemFont, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(landIndex), x, y);
+      ctx.fillText(String(li), x, y);
     }
   }
-
-  // User location on top.
-  const [ux, uy] = project(startLat, startLon);
   ctx.beginPath();
   ctx.arc(ux, uy, 6, 0, Math.PI * 2);
-  ctx.fillStyle = C.user;
-  ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = C.userRing;
-  ctx.stroke();
+  ctx.fillStyle = C.user; ctx.fill();
+  ctx.lineWidth = 2.5; ctx.strokeStyle = C.userRing; ctx.stroke();
 }
 
 // ---------- init ----------
@@ -746,11 +863,14 @@ async function init() {
     }
   });
 
+  document.addEventListener("visibilitychange", () => setSensorsActive(!document.hidden));
+
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
     els.enableBtn.textContent = "Sensors enabled";
     els.pointingLabel.textContent = "Move your device to wake the compass";
     setStatus("Waiting for compass and GPS…");
+    sensorsOn = true;
     // Kick off BOTH permission requests synchronously, while we still have the
     // user activation from this tap. iOS Safari (iPhone especially) denies a
     // geolocation prompt that fires after `await`-ing the orientation dialog,
