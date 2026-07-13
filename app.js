@@ -907,12 +907,14 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
       startFeat = s.feat;
     }
   }
-  if (startFeat) {
-    drawCallout(ux, uy, [
-      { text: startFeat.name, font: fontName, color: C.labelStart },
-      { text: "You are here", font: fontSub, color: C.labelText },
-    ], C.user);
-  }
+  // Label your own position too, even when you're not standing on any
+  // country (e.g. on a ferry) — name the water you're actually in instead of
+  // leaving the dot with no callout at all.
+  const hereName = startFeat ? startFeat.name : nameTheWaterAt(startLat, startLon).displaySea;
+  drawCallout(ux, uy, [
+    { text: hereName, font: fontName, color: C.labelStart },
+    { text: "You are here", font: fontSub, color: C.labelText },
+  ], C.user);
 
   // Sea names + neighbour labels are the costly passes (many measureText +
   // collision checks); skip them on the light mid-turn frames.
@@ -1051,6 +1053,18 @@ function regionalOverride(lat, lon) {
   return null;
 }
 
+// The display-ready name for the water at a point: a real named sea if one
+// matched, a regional override for known gaps, or an ocean-basin guess as a
+// last resort. Shared by the "Who's out there" panel and the map's "you are
+// here" callout when you're at sea (e.g. on a ferry) rather than on land.
+function nameTheWaterAt(lat, lon) {
+  let rawSea = seaNameAt(lon, lat);
+  if (!rawSea || GENERIC_OCEAN_NAMES.has(rawSea)) {
+    rawSea = regionalOverride(lat, lon) || rawSea;
+  }
+  return { rawSea, displaySea: prettySea(rawSea || oceanBasin(lat, lon)) };
+}
+
 function seaLifeFor(seaName, lat, lon) {
   if (!sealife) return [];
   // Prefer whatever named marine polygon was actually found (seaName) — it
@@ -1081,11 +1095,7 @@ function updateWoot(startLat, startLon, heading, segments) {
   // Sample a point out in the water to name the sea reliably.
   const sampleKm = seaSeg.startKm + Math.min(20, (seaSeg.endKm - seaSeg.startKm) / 2 || 5);
   const wp = destinationPoint(startLat, startLon, heading, sampleKm);
-  let rawSea = seaNameAt(wp.lon, wp.lat);
-  if (!rawSea || GENERIC_OCEAN_NAMES.has(rawSea)) {
-    rawSea = regionalOverride(wp.lat, wp.lon) || rawSea;
-  }
-  const displaySea = prettySea(rawSea || oceanBasin(wp.lat, wp.lon));
+  const { rawSea, displaySea } = nameTheWaterAt(wp.lat, wp.lon);
   const animals = seaLifeFor(rawSea, wp.lat, wp.lon);
   const city = nearestCity(startLat, startLon);
 
