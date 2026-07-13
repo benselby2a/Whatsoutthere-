@@ -710,15 +710,19 @@ function drawFeature(ctx, geometry, project, fill, stroke, lineWidth, seamPx) {
 
 // A rough canvas map (no tiles / no network) showing the user, the great-circle
 // path, and the outlines of the countries ahead, highlighted.
-// How far out to frame the map, from the route's farthest point.
+// How far out to frame the map, from the route's farthest point. Only a real
+// destination (not just the landmass you're standing on) should let the
+// framing grow past the 5,000km cap — otherwise "on land but nothing found
+// within range" zooms out to the full 20,000km search radius, same as the
+// "at sea, nothing found" case should but doesn't.
 function computeFramingKm(segments) {
-  const anyLand = segments.some((s) => s.feat);
+  const foundDestination = segments.some((s) => s.feat && s.startKm > 0);
   let farKm = 0;
   for (const s of segments) {
     if (typeof s.startKm === "number") farKm = Math.max(farKm, s.startKm);
     if (typeof s.endKm === "number") farKm = Math.max(farKm, s.endKm);
   }
-  return anyLand ? Math.max(farKm, 200) : Math.min(Math.max(farKm, 200), 5000);
+  return foundDestination ? Math.max(farKm, 200) : Math.min(Math.max(farKm, 200), 5000);
 }
 
 function drawMap(startLat, startLon, heading, segments, full = true, framingKm = null) {
@@ -1142,7 +1146,7 @@ async function init() {
     setStatus("Failed to load map data. Check your connection and reload.", true);
   }
 
-  window.addEventListener("resize", drawMapNow);
+  window.addEventListener("resize", () => drawMapNow());
 
   document.addEventListener("visibilitychange", () => setSensorsActive(!document.hidden));
 
