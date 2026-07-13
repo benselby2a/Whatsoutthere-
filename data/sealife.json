@@ -1,0 +1,264 @@
+{
+  "note": "Illustrative sea-life data for the 'Who's Out There' feature. Species and commonality ratings (1-5) are indicative, not a scientific survey. Keyed by sea name (matching the marine dataset) with ocean-basin fallbacks. Seasons are northern-hemisphere labels; the app flips them south of the equator.",
+  "seas": {
+    "English Channel": [
+      { "name": "Harbour porpoise", "emoji": "🐬", "commonality": 4 },
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 4 },
+      { "name": "Atlantic mackerel", "emoji": "🐟", "commonality": 5, "seasons": ["summer", "autumn"] },
+      { "name": "European sea bass", "emoji": "🐟", "commonality": 4 },
+      { "name": "Common cuttlefish", "emoji": "🦑", "commonality": 3, "seasons": ["spring", "summer"] },
+      { "name": "Edible crab", "emoji": "🦀", "commonality": 4 },
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 3, "seasons": ["summer", "autumn"] },
+      { "name": "Basking shark", "emoji": "🦈", "commonality": 2, "seasons": ["spring", "summer"] },
+      { "name": "Lion's mane jellyfish", "emoji": "🪼", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Ocean sunfish", "emoji": "🐡", "commonality": 1, "seasons": ["summer", "autumn"] }
+    ],
+    "North Sea": [
+      { "name": "Harbour porpoise", "emoji": "🐬", "commonality": 4 },
+      { "name": "Atlantic herring", "emoji": "🐟", "commonality": 5 },
+      { "name": "Atlantic cod", "emoji": "🐟", "commonality": 4, "seasons": ["autumn", "winter"] },
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 4 },
+      { "name": "Harbour seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Atlantic mackerel", "emoji": "🐟", "commonality": 4, "seasons": ["summer"] },
+      { "name": "White-beaked dolphin", "emoji": "🐬", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Minke whale", "emoji": "🐋", "commonality": 2, "seasons": ["summer"] },
+      { "name": "European lobster", "emoji": "🦞", "commonality": 3 },
+      { "name": "Moon jellyfish", "emoji": "🪼", "commonality": 3, "seasons": ["summer"] }
+    ],
+    "Irish Sea": [
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 4 },
+      { "name": "Harbour porpoise", "emoji": "🐬", "commonality": 4 },
+      { "name": "Bottlenose dolphin", "emoji": "🐬", "commonality": 3 },
+      { "name": "Atlantic mackerel", "emoji": "🐟", "commonality": 4, "seasons": ["summer", "autumn"] },
+      { "name": "Basking shark", "emoji": "🦈", "commonality": 2, "seasons": ["spring", "summer"] },
+      { "name": "Edible crab", "emoji": "🦀", "commonality": 4 },
+      { "name": "European lobster", "emoji": "🦞", "commonality": 3 },
+      { "name": "Common starfish", "emoji": "⭐", "commonality": 4 },
+      { "name": "Compass jellyfish", "emoji": "🪼", "commonality": 2, "seasons": ["summer"] }
+    ],
+    "Bristol Channel": [
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Harbour porpoise", "emoji": "🐬", "commonality": 3 },
+      { "name": "European sea bass", "emoji": "🐟", "commonality": 4 },
+      { "name": "Atlantic cod", "emoji": "🐟", "commonality": 3, "seasons": ["autumn", "winter"] },
+      { "name": "Conger eel", "emoji": "🐍", "commonality": 3 },
+      { "name": "Edible crab", "emoji": "🦀", "commonality": 4 },
+      { "name": "Thornback ray", "emoji": "🐟", "commonality": 3 },
+      { "name": "Barrel jellyfish", "emoji": "🪼", "commonality": 2, "seasons": ["spring", "summer"] }
+    ],
+    "Bay of Biscay": [
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 5 },
+      { "name": "Fin whale", "emoji": "🐋", "commonality": 3, "seasons": ["summer", "autumn"] },
+      { "name": "Cuvier's beaked whale", "emoji": "🐋", "commonality": 2 },
+      { "name": "European pilchard", "emoji": "🐟", "commonality": 4 },
+      { "name": "Bluefin tuna", "emoji": "🐟", "commonality": 3, "seasons": ["summer", "autumn"] },
+      { "name": "European anchovy", "emoji": "🐟", "commonality": 4 },
+      { "name": "Ocean sunfish", "emoji": "🐡", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Loggerhead turtle", "emoji": "🐢", "commonality": 1, "seasons": ["summer", "autumn"] }
+    ],
+    "Norwegian Sea": [
+      { "name": "Atlantic herring", "emoji": "🐟", "commonality": 5 },
+      { "name": "Killer whale", "emoji": "🐋", "commonality": 3, "seasons": ["autumn", "winter"] },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 3, "seasons": ["autumn", "winter"] },
+      { "name": "Atlantic cod", "emoji": "🐟", "commonality": 4 },
+      { "name": "Atlantic puffin", "emoji": "🐧", "commonality": 3, "seasons": ["spring", "summer"] },
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Sperm whale", "emoji": "🐋", "commonality": 2 },
+      { "name": "Basking shark", "emoji": "🦈", "commonality": 1, "seasons": ["summer"] }
+    ],
+    "Baltic Sea": [
+      { "name": "Herring", "emoji": "🐟", "commonality": 5 },
+      { "name": "European sprat", "emoji": "🐟", "commonality": 5 },
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Harbour porpoise", "emoji": "🐬", "commonality": 2 },
+      { "name": "Atlantic cod", "emoji": "🐟", "commonality": 3 },
+      { "name": "Northern pike", "emoji": "🐟", "commonality": 3 },
+      { "name": "Ringed seal", "emoji": "🦭", "commonality": 2, "seasons": ["winter"] },
+      { "name": "Moon jellyfish", "emoji": "🪼", "commonality": 3, "seasons": ["summer"] }
+    ],
+    "Mediterranean Sea": [
+      { "name": "Striped dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "Bottlenose dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "Loggerhead turtle", "emoji": "🐢", "commonality": 3, "seasons": ["summer"] },
+      { "name": "European seahorse", "emoji": "🐟", "commonality": 2 },
+      { "name": "Fin whale", "emoji": "🐋", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Common octopus", "emoji": "🐙", "commonality": 4 },
+      { "name": "Dusky grouper", "emoji": "🐟", "commonality": 3 },
+      { "name": "Mauve stinger jellyfish", "emoji": "🪼", "commonality": 3, "seasons": ["summer", "autumn"] },
+      { "name": "Sandbar shark", "emoji": "🦈", "commonality": 1 }
+    ],
+    "Caribbean Sea": [
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 4 },
+      { "name": "Hawksbill turtle", "emoji": "🐢", "commonality": 3 },
+      { "name": "Bottlenose dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "Nurse shark", "emoji": "🦈", "commonality": 3 },
+      { "name": "Queen angelfish", "emoji": "🐠", "commonality": 4 },
+      { "name": "Caribbean reef squid", "emoji": "🦑", "commonality": 3 },
+      { "name": "Spiny lobster", "emoji": "🦞", "commonality": 3 },
+      { "name": "West Indian manatee", "emoji": "🦭", "commonality": 2 },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter", "spring"] }
+    ],
+    "Gulf of Mexico": [
+      { "name": "Bottlenose dolphin", "emoji": "🐬", "commonality": 5 },
+      { "name": "Brown pelican", "emoji": "🐦", "commonality": 4 },
+      { "name": "Kemp's ridley turtle", "emoji": "🐢", "commonality": 2 },
+      { "name": "Red snapper", "emoji": "🐟", "commonality": 4 },
+      { "name": "Blue crab", "emoji": "🦀", "commonality": 4 },
+      { "name": "Whale shark", "emoji": "🦈", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Atlantic tarpon", "emoji": "🐟", "commonality": 3, "seasons": ["summer"] },
+      { "name": "Brown shrimp", "emoji": "🦐", "commonality": 5 }
+    ],
+    "Coral Sea": [
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 4 },
+      { "name": "Clownfish", "emoji": "🐠", "commonality": 4 },
+      { "name": "Reef manta ray", "emoji": "🐟", "commonality": 3 },
+      { "name": "Whitetip reef shark", "emoji": "🦈", "commonality": 3 },
+      { "name": "Giant clam", "emoji": "🐚", "commonality": 3 },
+      { "name": "Humphead wrasse", "emoji": "🐟", "commonality": 2 },
+      { "name": "Dwarf minke whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter"] },
+      { "name": "Dugong", "emoji": "🦭", "commonality": 2 }
+    ],
+    "Great Barrier Reef": [
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 5 },
+      { "name": "Clownfish", "emoji": "🐠", "commonality": 5 },
+      { "name": "Reef manta ray", "emoji": "🐟", "commonality": 3 },
+      { "name": "Blacktip reef shark", "emoji": "🦈", "commonality": 3 },
+      { "name": "Giant clam", "emoji": "🐚", "commonality": 3 },
+      { "name": "Maori wrasse", "emoji": "🐟", "commonality": 3 },
+      { "name": "Dugong", "emoji": "🦭", "commonality": 2 },
+      { "name": "Dwarf minke whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter"] }
+    ],
+    "Tasman Sea": [
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "Australian fur seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 3, "seasons": ["autumn", "spring"] },
+      { "name": "Little penguin", "emoji": "🐧", "commonality": 3 },
+      { "name": "Snapper", "emoji": "🐟", "commonality": 4 },
+      { "name": "Yellowtail kingfish", "emoji": "🐟", "commonality": 3, "seasons": ["summer"] },
+      { "name": "Great white shark", "emoji": "🦈", "commonality": 1 },
+      { "name": "Southern right whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter"] }
+    ],
+    "South China Sea": [
+      { "name": "Indo-Pacific bottlenose dolphin", "emoji": "🐬", "commonality": 3 },
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 3 },
+      { "name": "Whale shark", "emoji": "🦈", "commonality": 2 },
+      { "name": "Yellowfin tuna", "emoji": "🐟", "commonality": 3 },
+      { "name": "Reef squid", "emoji": "🦑", "commonality": 3 },
+      { "name": "Giant grouper", "emoji": "🐟", "commonality": 2 },
+      { "name": "Banded sea krait", "emoji": "🐍", "commonality": 2 },
+      { "name": "Dugong", "emoji": "🦭", "commonality": 1 }
+    ],
+    "Arabian Sea": [
+      { "name": "Indian Ocean humpback dolphin", "emoji": "🐬", "commonality": 3 },
+      { "name": "Spinner dolphin", "emoji": "🐬", "commonality": 3 },
+      { "name": "Whale shark", "emoji": "🦈", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 3 },
+      { "name": "Indian oil sardine", "emoji": "🐟", "commonality": 5 },
+      { "name": "Yellowfin tuna", "emoji": "🐟", "commonality": 3 },
+      { "name": "Arabian humpback whale", "emoji": "🐋", "commonality": 1 },
+      { "name": "Blue swimmer crab", "emoji": "🦀", "commonality": 4 }
+    ],
+    "Red Sea": [
+      { "name": "Clownfish", "emoji": "🐠", "commonality": 4 },
+      { "name": "Napoleon wrasse", "emoji": "🐟", "commonality": 2 },
+      { "name": "Whitetip reef shark", "emoji": "🦈", "commonality": 3 },
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 3 },
+      { "name": "Spinner dolphin", "emoji": "🐬", "commonality": 3 },
+      { "name": "Whale shark", "emoji": "🦈", "commonality": 2, "seasons": ["spring"] },
+      { "name": "Dugong", "emoji": "🦭", "commonality": 2 },
+      { "name": "Lionfish", "emoji": "🐠", "commonality": 4 }
+    ],
+    "Sea of Japan": [
+      { "name": "Japanese flying squid", "emoji": "🦑", "commonality": 5 },
+      { "name": "Pacific herring", "emoji": "🐟", "commonality": 4 },
+      { "name": "Chum salmon", "emoji": "🐟", "commonality": 3, "seasons": ["autumn"] },
+      { "name": "Spotted seal", "emoji": "🦭", "commonality": 2, "seasons": ["winter"] },
+      { "name": "Minke whale", "emoji": "🐋", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Pacific bluefin tuna", "emoji": "🐟", "commonality": 3 },
+      { "name": "Moon jellyfish", "emoji": "🪼", "commonality": 4, "seasons": ["summer"] },
+      { "name": "Snow crab", "emoji": "🦀", "commonality": 3, "seasons": ["winter"] }
+    ],
+    "Bering Sea": [
+      { "name": "Walrus", "emoji": "🦭", "commonality": 3 },
+      { "name": "Steller sea lion", "emoji": "🦭", "commonality": 3 },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 3, "seasons": ["summer"] },
+      { "name": "Pacific cod", "emoji": "🐟", "commonality": 4 },
+      { "name": "Walleye pollock", "emoji": "🐟", "commonality": 5 },
+      { "name": "King crab", "emoji": "🦀", "commonality": 3, "seasons": ["autumn", "winter"] },
+      { "name": "Northern fur seal", "emoji": "🦭", "commonality": 3, "seasons": ["summer"] },
+      { "name": "Tufted puffin", "emoji": "🐧", "commonality": 2, "seasons": ["summer"] }
+    ]
+  },
+  "oceans": {
+    "North Atlantic Ocean": [
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "Atlantic mackerel", "emoji": "🐟", "commonality": 4, "seasons": ["summer", "autumn"] },
+      { "name": "Fin whale", "emoji": "🐋", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Blue shark", "emoji": "🦈", "commonality": 3, "seasons": ["summer", "autumn"] },
+      { "name": "Leatherback turtle", "emoji": "🐢", "commonality": 1, "seasons": ["summer"] },
+      { "name": "Atlantic puffin", "emoji": "🐧", "commonality": 2, "seasons": ["spring", "summer"] },
+      { "name": "Grey seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Portuguese man o' war", "emoji": "🪼", "commonality": 2 }
+    ],
+    "South Atlantic Ocean": [
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "South American fur seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Southern right whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter"] },
+      { "name": "Magellanic penguin", "emoji": "🐧", "commonality": 3, "seasons": ["spring", "summer"] },
+      { "name": "Argentine anchovy", "emoji": "🐟", "commonality": 4 },
+      { "name": "Blue shark", "emoji": "🦈", "commonality": 3 },
+      { "name": "Leatherback turtle", "emoji": "🐢", "commonality": 1 },
+      { "name": "Patagonian squid", "emoji": "🦑", "commonality": 3 }
+    ],
+    "North Pacific Ocean": [
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "California sea lion", "emoji": "🦭", "commonality": 3 },
+      { "name": "Grey whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter", "spring"] },
+      { "name": "Pacific bluefin tuna", "emoji": "🐟", "commonality": 3 },
+      { "name": "Blue shark", "emoji": "🦈", "commonality": 3 },
+      { "name": "Sea otter", "emoji": "🦦", "commonality": 2 },
+      { "name": "Chinook salmon", "emoji": "🐟", "commonality": 3, "seasons": ["autumn"] },
+      { "name": "Humboldt squid", "emoji": "🦑", "commonality": 3 }
+    ],
+    "South Pacific Ocean": [
+      { "name": "Common dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "New Zealand fur seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 2, "seasons": ["autumn", "spring"] },
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 3 },
+      { "name": "Skipjack tuna", "emoji": "🐟", "commonality": 4 },
+      { "name": "Mako shark", "emoji": "🦈", "commonality": 2 },
+      { "name": "Little penguin", "emoji": "🐧", "commonality": 2 },
+      { "name": "Flying fish", "emoji": "🐟", "commonality": 3 }
+    ],
+    "INDIAN OCEAN": [
+      { "name": "Spinner dolphin", "emoji": "🐬", "commonality": 4 },
+      { "name": "Green sea turtle", "emoji": "🐢", "commonality": 3 },
+      { "name": "Whale shark", "emoji": "🦈", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Yellowfin tuna", "emoji": "🐟", "commonality": 4 },
+      { "name": "Manta ray", "emoji": "🐟", "commonality": 2 },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 2, "seasons": ["winter"] },
+      { "name": "Dugong", "emoji": "🦭", "commonality": 1 },
+      { "name": "Flying fish", "emoji": "🐟", "commonality": 3 }
+    ],
+    "Arctic Ocean": [
+      { "name": "Ringed seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Polar bear", "emoji": "🐻‍❄️", "commonality": 2 },
+      { "name": "Beluga whale", "emoji": "🐋", "commonality": 2, "seasons": ["summer"] },
+      { "name": "Narwhal", "emoji": "🐋", "commonality": 1 },
+      { "name": "Walrus", "emoji": "🦭", "commonality": 2 },
+      { "name": "Arctic cod", "emoji": "🐟", "commonality": 4 },
+      { "name": "Bowhead whale", "emoji": "🐋", "commonality": 1 },
+      { "name": "Little auk", "emoji": "🐧", "commonality": 3, "seasons": ["summer"] }
+    ],
+    "SOUTHERN OCEAN": [
+      { "name": "Antarctic krill", "emoji": "🦐", "commonality": 5 },
+      { "name": "Adelie penguin", "emoji": "🐧", "commonality": 4, "seasons": ["spring", "summer"] },
+      { "name": "Weddell seal", "emoji": "🦭", "commonality": 3 },
+      { "name": "Leopard seal", "emoji": "🦭", "commonality": 2 },
+      { "name": "Humpback whale", "emoji": "🐋", "commonality": 3, "seasons": ["summer"] },
+      { "name": "Killer whale", "emoji": "🐋", "commonality": 2 },
+      { "name": "Antarctic toothfish", "emoji": "🐟", "commonality": 2 },
+      { "name": "Wandering albatross", "emoji": "🐦", "commonality": 2 }
+    ]
+  }
+}

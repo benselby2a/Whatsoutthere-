@@ -241,6 +241,91 @@ h1 { font-size: 1.2rem; margin: 0; }
 }
 .status:empty { display: none; }
 
+/* ---- Who's out there? trigger + sheet ---- */
+.woot-btn {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(79, 209, 197, 0.18), var(--bg-card));
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.woot-btn[hidden] { display: none; }
+.woot-btn:active { transform: scale(0.99); }
+.woot-chevron { color: var(--accent); font-size: 1.2rem; font-weight: 700; }
+
+.woot-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(4, 8, 18, 0.55);
+  padding: 0;
+}
+.woot-panel[hidden] { display: none; }
+.woot-sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px 18px 0 0;
+  padding: 16px 18px 22px;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+}
+.woot-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.woot-sheet-title { font-size: 1.2rem; font-weight: 700; }
+.woot-sheet-meta { color: var(--text-dim); font-size: 0.85rem; margin-top: 2px; text-transform: capitalize; }
+.woot-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.woot-list { list-style: none; margin: 0; padding: 0; }
+.woot-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.woot-item:last-child { border-bottom: none; }
+.woot-emoji { font-size: 1.4rem; flex: 0 0 auto; width: 26px; text-align: center; }
+.woot-name { flex: 1 1 auto; font-size: 0.98rem; }
+.woot-rating {
+  flex: 0 0 auto;
+  letter-spacing: 2px;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+.woot-empty { color: var(--text-dim); padding: 12px 0; }
+.woot-foot { color: var(--text-dim); font-size: 0.75rem; margin: 14px 0 0; }
+
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f5f7fb;
