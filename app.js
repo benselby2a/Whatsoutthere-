@@ -435,11 +435,10 @@ function renderResult(startLat, startLon, heading, segments) {
       const midKm = (seg.startKm + seg.endKm) / 2;
       const midPt = destinationPoint(startLat, startLon, heading, midKm);
       const name = seaNameAt(midPt.lon, midPt.lat) || "Open sea";
-      const width = seg.endKm - seg.startKm;
       items.push(`
         <li class="route-sea">
           <span class="route-sea-name">🌊 ${name}</span>
-          <span class="route-sea-width">${dist(width)} across</span>
+          <span class="route-sea-width">from ${dist(seg.startKm)}</span>
         </li>
       `);
     }
@@ -490,8 +489,44 @@ function runLiveScan() {
 function mapColors() {
   const dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
-    ? { sea: "#0d1526", land: "#26324e", coast: "#3c4a6e", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526" }
-    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#93a6c6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff" };
+    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)" }
+    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)" };
+}
+
+// Area-weighted centroid of a ring (falls back to the vertex average for
+// degenerate rings), used to place a country's name label.
+function polygonCentroid(ring) {
+  let x = 0, y = 0, a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const x0 = ring[j][0], y0 = ring[j][1], x1 = ring[i][0], y1 = ring[i][1];
+    const f = x0 * y1 - x1 * y0;
+    a += f;
+    x += (x0 + x1) * f;
+    y += (y0 + y1) * f;
+  }
+  a *= 0.5;
+  if (Math.abs(a) < 1e-9) {
+    let sx = 0, sy = 0;
+    for (const p of ring) { sx += p[0]; sy += p[1]; }
+    return [sx / ring.length, sy / ring.length];
+  }
+  return [x / (6 * a), y / (6 * a)];
+}
+
+// A [lon, lat] label anchor: the centroid of the country's largest polygon.
+function labelPoint(geometry) {
+  const polys = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  let best = polys[0][0], bestArea = -1;
+  for (const rings of polys) {
+    const ring = rings[0];
+    let a = 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    }
+    a = Math.abs(a * 0.5);
+    if (a > bestArea) { bestArea = a; best = ring; }
+  }
+  return polygonCentroid(best);
 }
 
 // Draw one land feature (Polygon/MultiPolygon), each polygon as its own path so
@@ -619,6 +654,50 @@ function drawMap(startLat, startLon, heading, segments) {
   ctx.setLineDash([6, 5]);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // Country name labels, biggest-in-view first (and countries ahead prioritised),
+  // skipping ones too small to label or that would collide with a placed label.
+  ctx.font = "600 11px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const candidates = [];
+  for (const f of landFeatures) {
+    if (!f.name) continue;
+    const b = f.bbox;
+    if (b[3] < minLat || b[1] > maxLat) continue;
+    const lo = unwrap(b[0]), hi = unwrap(b[2]);
+    if (Math.max(lo, hi) < viewMinLon || Math.min(lo, hi) > viewMaxLon) continue;
+    const [cx, cy] = project(b[1], b[0]);
+    const [dx, dy] = project(b[3], b[2]);
+    const onW = Math.abs(dx - cx), onH = Math.abs(dy - cy);
+    if (Math.min(onW, onH) < 26) continue; // too small to label
+    if (!f._label) f._label = labelPoint(f.geometry);
+    const [lx, ly] = project(f._label[1], f._label[0]);
+    if (lx < 0 || lx > cssW || ly < 0 || ly > cssH) continue;
+    candidates.push({ name: f.name, x: lx, y: ly, area: onW * onH, ahead: highlights.has(f) });
+  }
+  candidates.sort((a, b) => (a.ahead === b.ahead ? b.area - a.area : a.ahead ? -1 : 1));
+
+  const placed = [];
+  for (const c of candidates) {
+    if (placed.length >= 12) break;
+    const tw = ctx.measureText(c.name).width;
+    // Keep the whole label on-canvas so edge countries don't clip.
+    const x = Math.min(Math.max(c.x, tw / 2 + 3), cssW - tw / 2 - 3);
+    const y = Math.min(Math.max(c.y, 9), cssH - 9);
+    const box = [x - tw / 2 - 2, y - 8, x + tw / 2 + 2, y + 8];
+    let overlap = false;
+    for (const p of placed) {
+      if (!(box[2] < p[0] || box[0] > p[2] || box[3] < p[1] || box[1] > p[3])) { overlap = true; break; }
+    }
+    if (overlap) continue;
+    placed.push(box);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = C.labelHalo;
+    ctx.strokeText(c.name, x, y);
+    ctx.fillStyle = c.ahead ? C.labelAhead : C.labelText;
+    ctx.fillText(c.name, x, y);
+  }
 
   // Numbered landfall markers, matching the list order.
   let landIndex = 0;
