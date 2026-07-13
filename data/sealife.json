@@ -1166,6 +1166,199 @@
         "emoji": "🐋",
         "commonality": 2
       }
+    ],
+    "Gulf of Guinea": [
+      {
+        "name": "Bonga shad",
+        "emoji": "🐟",
+        "commonality": 4
+      },
+      {
+        "name": "Bottlenose dolphin",
+        "emoji": "🐬",
+        "commonality": 4
+      },
+      {
+        "name": "Round sardinella",
+        "emoji": "🐟",
+        "commonality": 4
+      },
+      {
+        "name": "Green sea turtle",
+        "emoji": "🐢",
+        "commonality": 3
+      },
+      {
+        "name": "Leatherback turtle",
+        "emoji": "🐢",
+        "commonality": 3
+      },
+      {
+        "name": "Hawksbill turtle",
+        "emoji": "🐢",
+        "commonality": 2
+      },
+      {
+        "name": "Humpback whale",
+        "emoji": "🐋",
+        "commonality": 2
+      },
+      {
+        "name": "Atlantic humpback dolphin",
+        "emoji": "🐬",
+        "commonality": 1
+      },
+      {
+        "name": "African manatee",
+        "emoji": "🦭",
+        "commonality": 1
+      }
+    ],
+    "Mozambique Channel": [
+      {
+        "name": "Indo-Pacific bottlenose dolphin",
+        "emoji": "🐬",
+        "commonality": 4
+      },
+      {
+        "name": "Spinner dolphin",
+        "emoji": "🐬",
+        "commonality": 3
+      },
+      {
+        "name": "Humpback whale",
+        "emoji": "🐋",
+        "commonality": 4
+      },
+      {
+        "name": "Green sea turtle",
+        "emoji": "🐢",
+        "commonality": 3
+      },
+      {
+        "name": "Hawksbill turtle",
+        "emoji": "🐢",
+        "commonality": 3
+      },
+      {
+        "name": "Whale shark",
+        "emoji": "🦈",
+        "commonality": 2
+      },
+      {
+        "name": "Reef manta ray",
+        "emoji": "🐟",
+        "commonality": 2
+      },
+      {
+        "name": "Southern right whale",
+        "emoji": "🐋",
+        "commonality": 2
+      },
+      {
+        "name": "Dugong",
+        "emoji": "🦭",
+        "commonality": 2
+      },
+      {
+        "name": "Omura's whale",
+        "emoji": "🐋",
+        "commonality": 1
+      }
+    ],
+    "Gulf of Aden": [
+      {
+        "name": "Sardine",
+        "emoji": "🐟",
+        "commonality": 4
+      },
+      {
+        "name": "Mackerel",
+        "emoji": "🐟",
+        "commonality": 4
+      },
+      {
+        "name": "Kingfish",
+        "emoji": "🐟",
+        "commonality": 3
+      },
+      {
+        "name": "Spinner dolphin",
+        "emoji": "🐬",
+        "commonality": 3
+      },
+      {
+        "name": "Bottlenose dolphin",
+        "emoji": "🐬",
+        "commonality": 3
+      },
+      {
+        "name": "Sperm whale",
+        "emoji": "🐋",
+        "commonality": 2
+      },
+      {
+        "name": "Bryde's whale",
+        "emoji": "🐋",
+        "commonality": 1
+      },
+      {
+        "name": "Green sea turtle",
+        "emoji": "🐢",
+        "commonality": 2
+      },
+      {
+        "name": "Arabian humpback whale",
+        "emoji": "🐋",
+        "commonality": 1
+      }
+    ],
+    "Strait of Gibraltar": [
+      {
+        "name": "Atlantic bluefin tuna",
+        "emoji": "🐟",
+        "commonality": 4
+      },
+      {
+        "name": "Common dolphin",
+        "emoji": "🐬",
+        "commonality": 3
+      },
+      {
+        "name": "Striped dolphin",
+        "emoji": "🐬",
+        "commonality": 4
+      },
+      {
+        "name": "Bottlenose dolphin",
+        "emoji": "🐬",
+        "commonality": 3
+      },
+      {
+        "name": "Long-finned pilot whale",
+        "emoji": "🐋",
+        "commonality": 3
+      },
+      {
+        "name": "Killer whale",
+        "emoji": "🐋",
+        "commonality": 2
+      },
+      {
+        "name": "Fin whale",
+        "emoji": "🐋",
+        "commonality": 2
+      },
+      {
+        "name": "Sperm whale",
+        "emoji": "🐋",
+        "commonality": 2
+      },
+      {
+        "name": "Blue shark",
+        "emoji": "🦈",
+        "commonality": 2
+      }
     ]
   },
   "oceans": {

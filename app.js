@@ -1028,14 +1028,14 @@ function prettySea(name) {
 
 function seaLifeFor(seaName, lat, lon) {
   if (!sealife) return [];
-  // oceanBasin() can return either a named sea (e.g. "Mediterranean Sea", for
-  // small gulfs with no marine polygon) or an ocean basin key — check both.
-  const basin = oceanBasin(lat, lon);
-  const list =
-    (seaName && sealife.seas[seaName]) ||
-    sealife.seas[basin] ||
-    sealife.oceans[basin] ||
-    [];
+  // Prefer whatever named marine polygon was actually found (seaName) — it
+  // might be a curated sea, or it might already BE one of the ocean-basin
+  // names, since the marine dataset has polygons literally named e.g. "North
+  // Atlantic Ocean". Only fall back to the coordinate-based basin guess when
+  // no polygon matched at all, so the species list always matches the sea
+  // name shown in the title rather than silently disagreeing with it.
+  const basin = seaName || oceanBasin(lat, lon);
+  const list = sealife.seas[basin] || sealife.oceans[basin] || [];
   return list.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
 }
 
