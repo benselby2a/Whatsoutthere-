@@ -23,34 +23,32 @@ html, body {
 .app {
   max-width: 480px;
   margin: 0 auto;
-  padding: 24px 20px 48px;
+  padding: 10px 14px 14px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
 
-header { text-align: center; margin-bottom: 20px; }
-h1 { font-size: 1.6rem; margin: 0 0 6px; }
-.tagline { color: var(--text-dim); margin: 0; font-size: 0.95rem; }
+header { text-align: center; }
+h1 { font-size: 1.2rem; margin: 0; }
 
+/* Compact horizontal compass + readouts, so the map has room. */
 .compass-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 24px;
-  text-align: center;
-  margin-bottom: 20px;
-}
-
-.aim-note {
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 10px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .compass {
   position: relative;
-  width: 220px;
-  height: 220px;
-  margin: 0 auto 14px;
+  width: 104px;
+  height: 104px;
+  flex: 0 0 auto;
 }
 
 /* The rotating compass rose: turns so N always points to magnetic north. */
@@ -67,7 +65,7 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
   /* faint cross-hairs on the dial for a compass feel */
   content: "";
   position: absolute;
-  inset: 14px;
+  inset: 9px;
   border-radius: 50%;
   background:
     linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat,
@@ -78,27 +76,27 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
 .tick {
   position: absolute;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: 0.66rem;
   font-weight: 700;
 }
 .tick.n {
-  top: 6px; left: 50%; transform: translateX(-50%);
+  top: 3px; left: 50%; transform: translateX(-50%);
   color: #fff;
   background: var(--danger);
-  padding: 1px 7px;
-  border-radius: 8px;
+  padding: 0 5px;
+  border-radius: 7px;
 }
-.tick.e { top: 50%; right: 10px; transform: translateY(-50%); }
-.tick.s { bottom: 8px; left: 50%; transform: translateX(-50%); }
-.tick.w { top: 50%; left: 10px; transform: translateY(-50%); }
+.tick.e { top: 50%; right: 6px; transform: translateY(-50%); }
+.tick.s { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.tick.w { top: 50%; left: 6px; transform: translateY(-50%); }
 
 /* Fixed aiming line: always points up = the direction the device faces. */
 .sightline {
   position: absolute;
   left: 50%;
-  top: -16px;
+  top: -12px;
   width: 3px;
-  height: calc(50% + 16px);
+  height: calc(50% + 12px);
   margin-left: -1.5px;
   background: linear-gradient(180deg, var(--accent), rgba(79, 209, 197, 0.35));
   border-radius: 3px;
@@ -108,51 +106,51 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
 .sightline::before {
   content: "";
   position: absolute;
-  top: -11px;
+  top: -9px;
   left: 50%;
   transform: translateX(-50%);
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 12px solid var(--accent);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid var(--accent);
 }
 
 .hub {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
   border-radius: 50%;
   background: var(--accent-2);
   box-shadow: 0 0 0 3px var(--bg-card);
   z-index: 4;
 }
 
+.readouts {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
 .pointing-label {
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: var(--text-dim);
-  margin-bottom: 2px;
+  margin: 0 0 1px;
   text-transform: capitalize;
 }
 
 .heading-readout {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+  line-height: 1.1;
 }
 
 .location-readout {
   color: var(--text-dim);
-  font-size: 0.85rem;
-  margin-top: 4px;
-}
-
-.controls {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
+  font-size: 0.72rem;
+  margin: 2px 0 8px;
+  word-break: break-all;
 }
 
 .btn {
@@ -160,9 +158,9 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
-  padding: 14px 18px;
-  border-radius: 12px;
-  font-size: 1rem;
+  padding: 10px 14px;
+  border-radius: 11px;
+  font-size: 0.92rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -173,25 +171,52 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
   border: none;
 }
 .btn:not(:disabled):active { transform: scale(0.98); }
+.readouts .btn { width: 100%; }
 
-.hint {
+/* Canvas map: flexible, fills remaining vertical space. */
+.map-wrap {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 140px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #0d1526;
+}
+/* Absolutely positioned so the canvas's intrinsic size doesn't drive the flex
+   height (otherwise it grows the page and forces scrolling). */
+.map-wrap canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  padding: 0 24px;
   color: var(--text-dim);
   font-size: 0.82rem;
-  margin: -6px 0 16px;
 }
+.map-empty[hidden] { display: none; }
 
 .result {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
+  border-radius: 14px;
+  padding: 10px 14px;
+  max-height: 30vh;
+  overflow-y: auto;
 }
-.result h2 { margin: 0 0 4px; font-size: 1.2rem; }
+.result h2 { margin: 0 0 2px; font-size: 1.05rem; }
 .result.error { border-color: var(--danger); }
 .result.error h2 { color: var(--danger); }
-.result-lead { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 14px; }
+.result-lead { color: var(--text-dim); font-size: 0.8rem; margin: 0 0 8px; }
 
 .live-badge {
   display: inline-flex;
@@ -225,14 +250,14 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
 
 .route-land {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
-  padding: 12px 0;
+  padding: 6px 0;
 }
 .route-num {
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), #2fb8ab);
   color: #04201d;
@@ -240,23 +265,23 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 .route-body { flex: 1 1 auto; }
-.route-name { font-weight: 700; font-size: 1.05rem; }
-.route-sub { color: var(--accent); font-size: 0.88rem; margin-top: 2px; }
-.route-city { color: var(--text-dim); font-size: 0.82rem; margin-top: 3px; }
+.route-name { font-weight: 700; font-size: 0.98rem; }
+.route-sub { color: var(--accent); font-size: 0.82rem; margin-top: 1px; }
+.route-city { color: var(--text-dim); font-size: 0.78rem; margin-top: 2px; }
 
 .route-sea {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  padding: 6px 0 6px 40px;
+  padding: 3px 0 3px 34px;
   border-left: 2px dashed var(--border);
-  margin-left: 13px;
+  margin-left: 11px;
   color: var(--text-dim);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 .route-sea-name { font-style: italic; }
 .route-sea-width { white-space: nowrap; }
@@ -264,14 +289,13 @@ h1 { font-size: 1.6rem; margin: 0 0 6px; }
 .status {
   text-align: center;
   color: var(--text-dim);
-  min-height: 1.2em;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
 }
+.status:empty { display: none; }
 
 footer {
-  margin-top: 24px;
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 footer summary { cursor: pointer; color: var(--text); margin-bottom: 8px; }
 footer ul { padding-left: 18px; }
