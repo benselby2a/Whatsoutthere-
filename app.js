@@ -201,8 +201,37 @@ function distToBBoxKm(lat, lon, b) {
   return haversineKm(lat, lon, clampLat, clampLon);
 }
 
-// Nearest country to a point (used when you're at sea). Approximated by the
-// closest polygon vertex, with a bbox pre-filter so it stays fast.
+// How far outside a country's simplified coastline to still count you as "in"
+// it — covers simplification + coarse-GPS error for someone genuinely
+// standing on the coast (verified: real Mombasa waterfront is ~0.9km outside
+// the simplified polygon here), without being so generous that a boat a
+// meaningful distance offshore (e.g. mid-Channel, ~13km from either coast)
+// gets claimed as being "in" a country instead of "near" it.
+const COASTAL_SNAP_KM = 5;
+const KM_PER_DEG_LAT = 111.32;
+
+// Distance from a point to a line segment, in km, using a flat local
+// projection (longitude scaled by cos(lat)) — accurate enough at these
+// distances and much cheaper than proper geodesic segment distance.
+function distToSegmentKm(lat, lon, lat1, lon1, lat2, lon2) {
+  const kmPerDegLon = KM_PER_DEG_LAT * Math.cos(toRad(lat));
+  const px = lon * kmPerDegLon, py = lat * KM_PER_DEG_LAT;
+  const ax = lon1 * kmPerDegLon, ay = lat1 * KM_PER_DEG_LAT;
+  const bx = lon2 * kmPerDegLon, by = lat2 * KM_PER_DEG_LAT;
+  const abx = bx - ax, aby = by - ay;
+  const abLenSq = abx * abx + aby * aby;
+  let t = abLenSq > 0 ? ((px - ax) * abx + (py - ay) * aby) / abLenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  const dx = px - (ax + t * abx), dy = py - (ay + t * aby);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// Nearest country to a point and its distance (used when you're at sea).
+// Measured to the nearest polygon *edge*, not just vertices — a coastline
+// simplified down to a few widely-spaced points can put a real coastal point
+// tens of km from the nearest vertex while it sits right next to the edge
+// connecting them, which vertex-only distance would badly overstate. A bbox
+// pre-filter keeps this fast.
 function nearestCountry(lat, lon) {
   let best = null, bestDist = Infinity;
   for (const f of landFeatures) {
@@ -210,13 +239,30 @@ function nearestCountry(lat, lon) {
     const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
     for (const rings of polys) {
       const ring = rings[0];
-      for (let i = 0; i < ring.length; i++) {
-        const d = haversineKm(lat, lon, ring[i][1], ring[i][0]);
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const d = distToSegmentKm(lat, lon, ring[j][1], ring[j][0], ring[i][1], ring[i][0]);
         if (d < bestDist) { bestDist = d; best = f; }
       }
     }
   }
-  return best;
+  return best ? { feature: best, distKm: bestDist } : null;
+}
+
+// What country you're standing in, for the current-location display and as
+// the anchor for tracing a route. Coastlines are simplified (110m-scale
+// dataset) and low-power GPS is coarse, so a point genuinely on the coast —
+// especially somewhere with intricate creeks/inlets, like Mombasa's harbour —
+// can fall just outside the simplified polygon. Snap to the nearest country
+// within COASTAL_SNAP_KM before concluding "at sea". This is deliberately
+// only used for the starting point, not every step of a traced route: the
+// route's coastline-crossing distances should stay exact, and re-running
+// this heavier nearest-vertex search on every step would be far more
+// expensive than the plain point-in-polygon test.
+function findStartingCountry(lon, lat) {
+  const exact = findLandAt(lon, lat);
+  if (exact) return exact;
+  const near = nearestCountry(lat, lon);
+  return near && near.distKm <= COASTAL_SNAP_KM ? near.feature : null;
 }
 
 function cardinal(deg) {
@@ -383,11 +429,11 @@ function updateLocationUI() {
   // you're at sea, use the nearest country instead of "at sea".
   let place = "";
   if (landFeatures) {
-    const country = findLandAt(lon, lat);
+    const country = findStartingCountry(lon, lat);
     const city = nearestCity(lat, lon);
     let cname;
     if (country) cname = country.name;
-    else { const nc = nearestCountry(lat, lon); cname = nc ? `near ${nc.name}` : "at sea"; }
+    else { const nc = nearestCountry(lat, lon); cname = nc ? `near ${nc.feature.name}` : "at sea"; }
     place = city ? `${city.name}, ${cname}` : cname;
   }
   els.locationReadout.textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)}${place ? " · " + place : ""}`;
@@ -510,7 +556,7 @@ function refineBoundary(startLat, startLon, heading, target, loKm, hiKm) {
 // Walk outward and record the ordered sequence of land/sea segments until we've
 // reached MAX_DESTINATIONS countries after leaving the one you're standing on.
 function traceRoute(startLat, startLon, heading) {
-  let openFeat = findLandAt(startLon, startLat);
+  let openFeat = findStartingCountry(startLon, startLat);
   let open = { feat: openFeat, startKm: 0, startPt: { lat: startLat, lon: startLon } };
   const segments = [];
   let destOpened = 0;
