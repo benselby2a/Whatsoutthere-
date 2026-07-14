@@ -6,7 +6,7 @@
 <title>What's Out There?</title>
 <meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="style.css?v=24" />
+<link rel="stylesheet" href="style.css?v=25" />
 </head>
 <body>
   <main class="app">
@@ -60,11 +60,17 @@
         </div>
         <button id="wootClose" class="woot-close" aria-label="Close">✕</button>
       </div>
+      <div class="woot-seasons" id="wootSeasons" role="tablist" aria-label="Season">
+        <button class="woot-season" data-season="winter" role="tab">❄️ Winter</button>
+        <button class="woot-season" data-season="spring" role="tab">🌱 Spring</button>
+        <button class="woot-season" data-season="summer" role="tab">☀️ Summer</button>
+        <button class="woot-season" data-season="autumn" role="tab">🍂 Autumn</button>
+      </div>
       <ol class="woot-list" id="wootList"></ol>
-      <p class="woot-foot">Commonality (out of 5) is an indicative guide to how often each is seen here this season &mdash; curated from wildlife and marine sources, not a formal survey.</p>
+      <p class="woot-foot">Commonality (out of 5) is an indicative guide to how often each is seen here in the selected season &mdash; curated from wildlife and marine sources, not a formal survey.</p>
     </div>
   </div>
 
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

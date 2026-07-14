@@ -36,6 +36,7 @@ const els = {
   wootMeta: document.getElementById("wootMeta"),
   wootList: document.getElementById("wootList"),
   wootClose: document.getElementById("wootClose"),
+  wootSeasons: document.getElementById("wootSeasons"),
 };
 
 let compassGotReading = false;
@@ -50,6 +51,7 @@ let marineFeatures = null;
 let cities = null;
 let sealife = null;
 let wootData = null; // current "who's out there" context
+let selectedSeason = null; // user's manual season pick; null = follow the real current season
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
@@ -1171,11 +1173,12 @@ function updateWoot(startLat, startLon, heading, segments) {
   const sampleKm = seaSeg.startKm + Math.min(20, (seaSeg.endKm - seaSeg.startKm) / 2 || 5);
   const wp = destinationPoint(startLat, startLon, heading, sampleKm);
   const { rawSea, displaySea } = nameTheWaterAt(wp.lat, wp.lon);
-  const season = currentSeason(wp.lat);
-  const animals = seaLifeFor(rawSea, wp.lat, wp.lon, season);
   const city = nearestCity(startLat, startLon);
 
-  wootData = { sea: displaySea, season, animals, cityName: city ? city.name : null };
+  // Keep the raw lookup inputs rather than a baked-in species list, so
+  // renderWootPanel() can recompute for whichever season the user has
+  // toggled to without re-running the route/location logic.
+  wootData = { sea: displaySea, rawSea, lat: wp.lat, lon: wp.lon, actualSeason: currentSeason(wp.lat), cityName: city ? city.name : null };
   els.wootBtn.hidden = false;
   els.wootBtn.querySelector(".woot-label").textContent = `🐋 Who's out there? · ${displaySea}`;
   if (!els.wootPanel.hidden) renderWootPanel();
@@ -1183,14 +1186,21 @@ function updateWoot(startLat, startLon, heading, segments) {
 
 function renderWootPanel() {
   if (!wootData) return;
+  const season = selectedSeason || wootData.actualSeason;
+  const animals = seaLifeFor(wootData.rawSea, wootData.lat, wootData.lon, season);
+
   els.wootTitle.textContent = wootData.sea;
-  const seasonCap = wootData.season.charAt(0).toUpperCase() + wootData.season.slice(1);
-  els.wootMeta.textContent = `${seasonCap}${wootData.cityName ? " · Near " + wootData.cityName : ""}`;
-  if (!wootData.animals.length) {
+  els.wootMeta.textContent = wootData.cityName ? `Near ${wootData.cityName}` : "";
+
+  for (const btn of els.wootSeasons.children) {
+    btn.setAttribute("aria-selected", btn.dataset.season === season ? "true" : "false");
+  }
+
+  if (!animals.length) {
     els.wootList.innerHTML = `<li class="woot-empty">No sea-life data for this water yet.</li>`;
     return;
   }
-  els.wootList.innerHTML = wootData.animals
+  els.wootList.innerHTML = animals
     .map((a) => {
       const c = Math.max(0, Math.min(5, a.commonality));
       const dots = "●".repeat(c) + "○".repeat(5 - c);
@@ -1205,12 +1215,18 @@ function renderWootPanel() {
 
 function openWoot() {
   if (!wootData) return;
+  selectedSeason = null; // reopen always starts on the real current season
   renderWootPanel();
   els.wootPanel.hidden = false;
 }
 
 function closeWoot() {
   els.wootPanel.hidden = true;
+}
+
+function pickWootSeason(season) {
+  selectedSeason = season;
+  renderWootPanel();
 }
 
 // ---------- init ----------
@@ -1240,6 +1256,10 @@ async function init() {
   els.wootBtn.addEventListener("click", openWoot);
   els.wootClose.addEventListener("click", closeWoot);
   els.wootPanel.addEventListener("click", (e) => { if (e.target === els.wootPanel) closeWoot(); });
+  els.wootSeasons.addEventListener("click", (e) => {
+    const btn = e.target.closest(".woot-season");
+    if (btn) pickWootSeason(btn.dataset.season);
+  });
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
