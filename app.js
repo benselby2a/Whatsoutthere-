@@ -12,8 +12,6 @@ const MOVE_EPSILON_KM = 0.5; // location change before we re-run the trace
 const UI_HEADING_EPSILON = 0.5; // deg of change before we touch the compass DOM
 const SETTLE_MS = 200; // wait for the turn to settle before re-tracing the route
 const BIG_DRIFT_DEG = 25; // re-trace immediately once the heading drifts this far
-const VOYAGE_RADIUS_KM = 400; // how near you must be to a voyage's departure point
-const VOYAGE_BEARING_TOLERANCE = 20; // deg of heading match to that voyage's initial bearing
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -39,15 +37,6 @@ const els = {
   wootList: document.getElementById("wootList"),
   wootClose: document.getElementById("wootClose"),
   wootSeasons: document.getElementById("wootSeasons"),
-  voyageRow: document.getElementById("voyageRow"),
-  voyageBtn: document.getElementById("voyageBtn"),
-  voyageToggle: document.getElementById("voyageToggle"),
-  voyagePanel: document.getElementById("voyagePanel"),
-  voyageTitle: document.getElementById("voyageTitle"),
-  voyageMeta: document.getElementById("voyageMeta"),
-  voyageSummary: document.getElementById("voyageSummary"),
-  voyageRoute: document.getElementById("voyageRoute"),
-  voyageClose: document.getElementById("voyageClose"),
 };
 
 let compassGotReading = false;
@@ -63,9 +52,6 @@ let cities = null;
 let sealife = null;
 let wootData = null; // current "who's out there" context
 let selectedSeason = null; // user's manual season pick; null = follow the real current season
-let voyages = null;
-let matchedVoyage = null; // the historic voyage currently matching position + heading
-let voyageRouteVisible = true; // user's show/hide toggle for the voyage route overlay on the map
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
@@ -298,9 +284,7 @@ function angleDelta(a, b) {
   return d > 180 ? 360 - d : d;
 }
 
-function km(v) { return `${Math.round(v).toLocaleString()} km`; }
 function miles(v) { return `${Math.round(v / KM_PER_MILE).toLocaleString()} mi`; }
-function dist(v) { return `${miles(v)} (${km(v)})`; }
 
 // ---------- data loading ----------
 
@@ -325,15 +309,13 @@ async function fetchJSON(url) {
 }
 
 async function loadData() {
-  const [countries, marine, citiesJson, sealifeJson, voyagesJson] = await Promise.all([
+  const [countries, marine, citiesJson, sealifeJson] = await Promise.all([
     fetchJSON("data/countries.geojson"),
     fetchJSON("data/marine.geojson"),
     fetchJSON("data/cities.json"),
     fetchJSON("data/sealife.json"),
-    fetchJSON("data/voyages.json"),
   ]);
   sealife = sealifeJson;
-  voyages = voyagesJson.voyages;
 
   landFeatures = countries.features.map((f) => ({
     name: f.properties.name,
@@ -665,7 +647,6 @@ function renderResult(startLat, startLon, heading, segments) {
   els.mapEmpty.hidden = true;
   requestMapSpin();
   updateWoot(startLat, startLon, heading, segments);
-  updateVoyage(startLat, startLon, heading);
   drawMapNow(true);
 
   const hasLand = segments.some((s) => s.feat && s.startKm > 0);
@@ -717,8 +698,8 @@ function runLiveScan() {
 function mapColors() {
   const dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
-    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)", panelBg: "rgba(9,15,28,0.86)", labelStart: "#ffd9a8", seaLabel: "#93a6cc", voyagePath: "#c084fc", voyageLabel: "#f3e8ff" }
-    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)", panelBg: "rgba(255,255,255,0.9)", labelStart: "#8a4b12", seaLabel: "#5a6b8f", voyagePath: "#7c3aed", voyageLabel: "#4c1d95" };
+    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)", panelBg: "rgba(9,15,28,0.86)", labelStart: "#ffd9a8", seaLabel: "#93a6cc" }
+    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)", panelBg: "rgba(255,255,255,0.9)", labelStart: "#8a4b12", seaLabel: "#5a6b8f" };
 }
 
 // Area-weighted centroid of a ring (falls back to the vertex average for
@@ -927,24 +908,6 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // A matched historic voyage's whole route, drawn under your own path/labels
-  // in a distinct colour + dash so it reads as a separate, background layer
-  // rather than competing with your live heading. Togglable via voyageToggle.
-  if (matchedVoyage && voyageRouteVisible) {
-    const routePts = voyageRoutePoints(matchedVoyage);
-    ctx.beginPath();
-    for (let i = 0; i < routePts.length; i++) {
-      const [x, y] = project(routePts[i].lat, routePts[i].lon);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = C.voyagePath;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([2, 4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
   // ---- Annotations: destination callouts (country + cumulative distance +
   // nearest city), a "you are here" callout, sea names, then neighbour names. ----
   const placed = [];
@@ -1014,21 +977,6 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
       ], C.aheadStroke, true);
     } else {
       startFeat = s.feat;
-    }
-  }
-  // Label the matched voyage's route at whichever sampled point of it falls
-  // within the visible canvas first — the route can run far outside the
-  // current framing, so there may be no on-screen point to label at all.
-  if (matchedVoyage && voyageRouteVisible) {
-    const routePts = voyageRoutePoints(matchedVoyage);
-    for (const p of routePts) {
-      const [x, y] = project(p.lat, p.lon);
-      if (x < 0 || x > cssW || y < 0 || y > cssH) continue;
-      drawCallout(x, y, [
-        { text: `⛵ ${matchedVoyage.name}`, font: fontName, color: C.voyageLabel },
-        { text: String(matchedVoyage.year), font: fontSub, color: C.labelText },
-      ], C.voyagePath);
-      break;
     }
   }
   // Label your own position too, even when you're not standing on any
@@ -1293,120 +1241,6 @@ function pickWootSeason(season) {
   renderWootPanel();
 }
 
-// ---------- historic voyages ----------
-
-// A point a fraction `f` (0..1) along the great-circle path from (lat1,lon1)
-// to (lat2,lon2), given the path's angular length in radians — the standard
-// spherical slerp/intermediate-point formula. Used to sample a voyage's whole
-// route rather than just its departure point.
-function greatCircleInterpolate(lat1, lon1, lat2, lon2, f, angularDist) {
-  if (angularDist === 0) return { lat: lat1, lon: lon1 };
-  const A = Math.sin((1 - f) * angularDist) / Math.sin(angularDist);
-  const B = Math.sin(f * angularDist) / Math.sin(angularDist);
-  const phi1 = toRad(lat1), lambda1 = toRad(lon1);
-  const phi2 = toRad(lat2), lambda2 = toRad(lon2);
-  const x = A * Math.cos(phi1) * Math.cos(lambda1) + B * Math.cos(phi2) * Math.cos(lambda2);
-  const y = A * Math.cos(phi1) * Math.sin(lambda1) + B * Math.cos(phi2) * Math.sin(lambda2);
-  const z = A * Math.sin(phi1) + B * Math.sin(phi2);
-  const phi = Math.atan2(z, Math.sqrt(x * x + y * y));
-  const lambda = Math.atan2(y, x);
-  return { lat: toDeg(phi), lon: toDeg(lambda) };
-}
-
-const VOYAGE_PATH_SAMPLES = 40;
-const VOYAGE_ON_PATH_KM = 5; // close enough to the line itself that heading doesn't matter
-const VOYAGE_SIGHTLINE_STEP_KM = 25; // how finely to walk your sightline out looking for a crossing
-// How close your sightline needs to pass to a voyage's route to count as
-// "facing" it — chosen to match the old point+bearing check's selectivity
-// (roughly the cross-track offset a 20° bearing tolerance implies at
-// VOYAGE_RADIUS_KM range).
-const VOYAGE_CORRIDOR_KM = 140;
-
-// Sample points along a voyage's whole great-circle route (cached on the
-// voyage object, same pattern as the map's per-feature label-point cache).
-function voyageRoutePoints(v) {
-  if (v._routePts) return v._routePts;
-  const angularDist = haversineKm(v.fromLat, v.fromLon, v.toLat, v.toLon) / EARTH_RADIUS_KM;
-  const pts = [];
-  for (let i = 0; i <= VOYAGE_PATH_SAMPLES; i++) {
-    pts.push(greatCircleInterpolate(v.fromLat, v.fromLon, v.toLat, v.toLon, i / VOYAGE_PATH_SAMPLES, angularDist));
-  }
-  v._routePts = pts;
-  return pts;
-}
-
-function nearestRouteDistKm(lat, lon, routePts) {
-  let best = Infinity;
-  for (const p of routePts) {
-    const d = haversineKm(lat, lon, p.lat, p.lon);
-    if (d < best) best = d;
-  }
-  return best;
-}
-
-// A famous voyage's route "overlaps" your current view when some point along
-// its whole great-circle path (not just its departure point) is within
-// VOYAGE_RADIUS_KM of you, AND your sightline — walked out step by step in
-// your current heading — actually passes near that route, rather than just
-// happening to have the route somewhere nearby in an unrelated direction.
-// Standing right on the route itself always counts, regardless of heading.
-// If more than one voyage qualifies, show whichever route is nearest.
-function findMatchingVoyage(lat, lon, heading) {
-  if (!voyages) return null;
-  let best = null, bestDist = Infinity;
-  for (const v of voyages) {
-    const routePts = voyageRoutePoints(v);
-    const distToRoute = nearestRouteDistKm(lat, lon, routePts);
-    if (distToRoute > VOYAGE_RADIUS_KM) continue;
-
-    let intersects = distToRoute <= VOYAGE_ON_PATH_KM;
-    for (let d = VOYAGE_SIGHTLINE_STEP_KM; !intersects && d <= VOYAGE_RADIUS_KM; d += VOYAGE_SIGHTLINE_STEP_KM) {
-      const p = destinationPoint(lat, lon, heading, d);
-      if (nearestRouteDistKm(p.lat, p.lon, routePts) <= VOYAGE_CORRIDOR_KM) intersects = true;
-    }
-    if (!intersects) continue;
-    if (distToRoute < bestDist) { bestDist = distToRoute; best = v; }
-  }
-  return best;
-}
-
-function updateVoyage(startLat, startLon, heading) {
-  matchedVoyage = findMatchingVoyage(startLat, startLon, heading);
-  if (!matchedVoyage) {
-    els.voyageRow.hidden = true;
-    if (!els.voyagePanel.hidden) closeVoyage();
-    return;
-  }
-  els.voyageRow.hidden = false;
-  els.voyageBtn.querySelector(".voyage-label").textContent = `⛵ ${matchedVoyage.name} (${matchedVoyage.year})`;
-  if (!els.voyagePanel.hidden) renderVoyagePanel();
-}
-
-function toggleVoyageRoute() {
-  voyageRouteVisible = !voyageRouteVisible;
-  els.voyageToggle.setAttribute("aria-pressed", String(voyageRouteVisible));
-  drawMapNow(true);
-}
-
-function renderVoyagePanel() {
-  if (!matchedVoyage) return;
-  const v = matchedVoyage;
-  els.voyageTitle.textContent = v.name;
-  els.voyageMeta.textContent = String(v.year);
-  els.voyageSummary.textContent = v.summary;
-  els.voyageRoute.textContent = `${v.fromName} → ${v.toName} · ${dist(v.distanceKm)}`;
-}
-
-function openVoyage() {
-  if (!matchedVoyage) return;
-  renderVoyagePanel();
-  els.voyagePanel.hidden = false;
-}
-
-function closeVoyage() {
-  els.voyagePanel.hidden = true;
-}
-
 // ---------- service worker (offline + auto-update) ----------
 
 let swRegistration = null;
@@ -1470,11 +1304,6 @@ async function init() {
     const btn = e.target.closest(".woot-season");
     if (btn) pickWootSeason(btn.dataset.season);
   });
-
-  els.voyageBtn.addEventListener("click", openVoyage);
-  els.voyageClose.addEventListener("click", closeVoyage);
-  els.voyagePanel.addEventListener("click", (e) => { if (e.target === els.voyagePanel) closeVoyage(); });
-  els.voyageToggle.addEventListener("click", toggleVoyageRoute);
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
