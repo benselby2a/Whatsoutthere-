@@ -1060,6 +1060,18 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
 // ---------- who's out there (sea life) ----------
 
 const COAST_MAX_KM = 55; // treat as "on the coast facing the sea" within this
+const SEASON_FLIP = { winter: "summer", summer: "winter", spring: "autumn", autumn: "spring" };
+
+// Meteorological season from today's date, flipped south of the equator.
+function currentSeason(lat) {
+  const m = new Date().getMonth(); // 0 = January
+  let s;
+  if (m === 11 || m <= 1) s = "winter";
+  else if (m <= 4) s = "spring";
+  else if (m <= 7) s = "summer";
+  else s = "autumn";
+  return lat < 0 ? SEASON_FLIP[s] : s;
+}
 
 // Rough ocean basin for a point — the fallback when the specific sea isn't in
 // the dataset. Returns a key present in sealife.oceans. Longitude alone can't
@@ -1123,7 +1135,7 @@ function nameTheWaterAt(lat, lon) {
   return { rawSea, displaySea: prettySea(rawSea || oceanBasin(lat, lon)) };
 }
 
-function seaLifeFor(seaName, lat, lon) {
+function seaLifeFor(seaName, lat, lon, season) {
   if (!sealife) return [];
   // Prefer whatever named marine polygon was actually found (seaName) — it
   // might be a curated sea, or it might already BE one of the ocean-basin
@@ -1133,7 +1145,12 @@ function seaLifeFor(seaName, lat, lon) {
   // name shown in the title rather than silently disagreeing with it.
   const basin = seaName || oceanBasin(lat, lon);
   const list = sealife.seas[basin] || sealife.oceans[basin] || [];
-  return list.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
+  // A species with no "seasons" tag is present year-round. If filtering by
+  // season would leave nothing at all, show the full list rather than an
+  // empty panel — better a slightly-off list than nothing.
+  const inSeason = list.filter((a) => !a.seasons || a.seasons.includes(season));
+  const chosen = inSeason.length ? inSeason : list;
+  return chosen.slice().sort((a, b) => b.commonality - a.commonality).slice(0, 10);
 }
 
 // Work out the water you're facing (if you're on/near the coast looking seaward)
@@ -1154,10 +1171,11 @@ function updateWoot(startLat, startLon, heading, segments) {
   const sampleKm = seaSeg.startKm + Math.min(20, (seaSeg.endKm - seaSeg.startKm) / 2 || 5);
   const wp = destinationPoint(startLat, startLon, heading, sampleKm);
   const { rawSea, displaySea } = nameTheWaterAt(wp.lat, wp.lon);
-  const animals = seaLifeFor(rawSea, wp.lat, wp.lon);
+  const season = currentSeason(wp.lat);
+  const animals = seaLifeFor(rawSea, wp.lat, wp.lon, season);
   const city = nearestCity(startLat, startLon);
 
-  wootData = { sea: displaySea, animals, cityName: city ? city.name : null };
+  wootData = { sea: displaySea, season, animals, cityName: city ? city.name : null };
   els.wootBtn.hidden = false;
   els.wootBtn.querySelector(".woot-label").textContent = `🐋 Who's out there? · ${displaySea}`;
   if (!els.wootPanel.hidden) renderWootPanel();
@@ -1166,7 +1184,8 @@ function updateWoot(startLat, startLon, heading, segments) {
 function renderWootPanel() {
   if (!wootData) return;
   els.wootTitle.textContent = wootData.sea;
-  els.wootMeta.textContent = wootData.cityName ? `Near ${wootData.cityName}` : "";
+  const seasonCap = wootData.season.charAt(0).toUpperCase() + wootData.season.slice(1);
+  els.wootMeta.textContent = `${seasonCap}${wootData.cityName ? " · Near " + wootData.cityName : ""}`;
   if (!wootData.animals.length) {
     els.wootList.innerHTML = `<li class="woot-empty">No sea-life data for this water yet.</li>`;
     return;
