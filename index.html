@@ -6,7 +6,9 @@
 <title>What's Out There?</title>
 <meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="style.css?v=25" />
+<link rel="stylesheet" href="style.css?v=27" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0b1020" />
 </head>
 <body>
   <main class="app">
@@ -48,6 +50,11 @@
       <span class="woot-chevron">›</span>
     </button>
 
+    <button id="voyageBtn" class="woot-btn voyage-btn" hidden>
+      <span class="voyage-label">⛵ Historic voyage</span>
+      <span class="woot-chevron">›</span>
+    </button>
+
     <p class="status" id="status"></p>
   </main>
 
@@ -71,6 +78,21 @@
     </div>
   </div>
 
-  <script src="app.js?v=25"></script>
+  <div id="voyagePanel" class="woot-panel" hidden>
+    <div class="woot-sheet">
+      <div class="woot-head">
+        <div>
+          <div class="woot-sheet-title" id="voyageTitle"></div>
+          <div class="woot-sheet-meta" id="voyageMeta"></div>
+        </div>
+        <button id="voyageClose" class="woot-close" aria-label="Close">✕</button>
+      </div>
+      <p class="voyage-summary" id="voyageSummary"></p>
+      <p class="voyage-route" id="voyageRoute"></p>
+      <p class="woot-foot">Shown because you're near this voyage's route, facing roughly along it.</p>
+    </div>
+  </div>
+
+  <script src="app.js?v=27"></script>
 </body>
 </html>

@@ -35,6 +35,17 @@ step.
    against Natural Earth's marine polygons (`data/marine.geojson`), and the
    nearest city to each landfall is found from a bundled populated-places
    list (`data/cities.json`).
+6. If your position and heading roughly line up with the departure point and
+   initial bearing of a famous historic voyage (`data/voyages.json`), a
+   button appears letting you read about it.
+
+## Offline support
+
+The app registers a service worker (`sw.js`) that precaches the app shell and
+all bundled data files on first load, so it keeps working with no network
+connection afterwards (compass and map, though live GPS obviously still needs
+a real fix). When a new version is deployed, the service worker updates and
+the page reloads automatically to pick it up.
 
 ## Limitations
 

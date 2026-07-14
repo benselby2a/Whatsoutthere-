@@ -12,6 +12,8 @@ const MOVE_EPSILON_KM = 0.5; // location change before we re-run the trace
 const UI_HEADING_EPSILON = 0.5; // deg of change before we touch the compass DOM
 const SETTLE_MS = 200; // wait for the turn to settle before re-tracing the route
 const BIG_DRIFT_DEG = 25; // re-trace immediately once the heading drifts this far
+const VOYAGE_RADIUS_KM = 400; // how near you must be to a voyage's departure point
+const VOYAGE_BEARING_TOLERANCE = 20; // deg of heading match to that voyage's initial bearing
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -37,6 +39,13 @@ const els = {
   wootList: document.getElementById("wootList"),
   wootClose: document.getElementById("wootClose"),
   wootSeasons: document.getElementById("wootSeasons"),
+  voyageBtn: document.getElementById("voyageBtn"),
+  voyagePanel: document.getElementById("voyagePanel"),
+  voyageTitle: document.getElementById("voyageTitle"),
+  voyageMeta: document.getElementById("voyageMeta"),
+  voyageSummary: document.getElementById("voyageSummary"),
+  voyageRoute: document.getElementById("voyageRoute"),
+  voyageClose: document.getElementById("voyageClose"),
 };
 
 let compassGotReading = false;
@@ -52,6 +61,8 @@ let cities = null;
 let sealife = null;
 let wootData = null; // current "who's out there" context
 let selectedSeason = null; // user's manual season pick; null = follow the real current season
+let voyages = null;
+let matchedVoyage = null; // the historic voyage currently matching position + heading
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
@@ -291,19 +302,22 @@ function dist(v) { return `${miles(v)} (${km(v)})`; }
 // ---------- data loading ----------
 
 async function loadData() {
-  const [countriesRes, marineRes, citiesRes, sealifeRes] = await Promise.all([
+  const [countriesRes, marineRes, citiesRes, sealifeRes, voyagesRes] = await Promise.all([
     fetch("data/countries.geojson"),
     fetch("data/marine.geojson"),
     fetch("data/cities.json"),
     fetch("data/sealife.json"),
+    fetch("data/voyages.json"),
   ]);
-  const [countries, marine, citiesJson, sealifeJson] = await Promise.all([
+  const [countries, marine, citiesJson, sealifeJson, voyagesJson] = await Promise.all([
     countriesRes.json(),
     marineRes.json(),
     citiesRes.json(),
     sealifeRes.json(),
+    voyagesRes.json(),
   ]);
   sealife = sealifeJson;
+  voyages = voyagesJson.voyages;
 
   landFeatures = countries.features.map((f) => ({
     name: f.properties.name,
@@ -636,6 +650,7 @@ function renderResult(startLat, startLon, heading, segments) {
   requestMapSpin();
   drawMapNow(true);
   updateWoot(startLat, startLon, heading, segments);
+  updateVoyage(startLat, startLon, heading);
 
   const hasLand = segments.some((s) => s.feat && s.startKm > 0);
   setStatus(hasLand ? "" : `Open ocean — no land within range facing ${cardinal(heading)}.`);
@@ -1229,9 +1244,149 @@ function pickWootSeason(season) {
   renderWootPanel();
 }
 
+// ---------- historic voyages ----------
+
+// A point a fraction `f` (0..1) along the great-circle path from (lat1,lon1)
+// to (lat2,lon2), given the path's angular length in radians — the standard
+// spherical slerp/intermediate-point formula. Used to sample a voyage's whole
+// route rather than just its departure point.
+function greatCircleInterpolate(lat1, lon1, lat2, lon2, f, angularDist) {
+  if (angularDist === 0) return { lat: lat1, lon: lon1 };
+  const A = Math.sin((1 - f) * angularDist) / Math.sin(angularDist);
+  const B = Math.sin(f * angularDist) / Math.sin(angularDist);
+  const phi1 = toRad(lat1), lambda1 = toRad(lon1);
+  const phi2 = toRad(lat2), lambda2 = toRad(lon2);
+  const x = A * Math.cos(phi1) * Math.cos(lambda1) + B * Math.cos(phi2) * Math.cos(lambda2);
+  const y = A * Math.cos(phi1) * Math.sin(lambda1) + B * Math.cos(phi2) * Math.sin(lambda2);
+  const z = A * Math.sin(phi1) + B * Math.sin(phi2);
+  const phi = Math.atan2(z, Math.sqrt(x * x + y * y));
+  const lambda = Math.atan2(y, x);
+  return { lat: toDeg(phi), lon: toDeg(lambda) };
+}
+
+const VOYAGE_PATH_SAMPLES = 40;
+const VOYAGE_ON_PATH_KM = 5; // close enough to the line itself that heading doesn't matter
+const VOYAGE_SIGHTLINE_STEP_KM = 25; // how finely to walk your sightline out looking for a crossing
+// How close your sightline needs to pass to a voyage's route to count as
+// "facing" it — chosen to match the old point+bearing check's selectivity
+// (roughly the cross-track offset a 20° bearing tolerance implies at
+// VOYAGE_RADIUS_KM range).
+const VOYAGE_CORRIDOR_KM = 140;
+
+// Sample points along a voyage's whole great-circle route (cached on the
+// voyage object, same pattern as the map's per-feature label-point cache).
+function voyageRoutePoints(v) {
+  if (v._routePts) return v._routePts;
+  const angularDist = haversineKm(v.fromLat, v.fromLon, v.toLat, v.toLon) / EARTH_RADIUS_KM;
+  const pts = [];
+  for (let i = 0; i <= VOYAGE_PATH_SAMPLES; i++) {
+    pts.push(greatCircleInterpolate(v.fromLat, v.fromLon, v.toLat, v.toLon, i / VOYAGE_PATH_SAMPLES, angularDist));
+  }
+  v._routePts = pts;
+  return pts;
+}
+
+function nearestRouteDistKm(lat, lon, routePts) {
+  let best = Infinity;
+  for (const p of routePts) {
+    const d = haversineKm(lat, lon, p.lat, p.lon);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// A famous voyage's route "overlaps" your current view when some point along
+// its whole great-circle path (not just its departure point) is within
+// VOYAGE_RADIUS_KM of you, AND your sightline — walked out step by step in
+// your current heading — actually passes near that route, rather than just
+// happening to have the route somewhere nearby in an unrelated direction.
+// Standing right on the route itself always counts, regardless of heading.
+// If more than one voyage qualifies, show whichever route is nearest.
+function findMatchingVoyage(lat, lon, heading) {
+  if (!voyages) return null;
+  let best = null, bestDist = Infinity;
+  for (const v of voyages) {
+    const routePts = voyageRoutePoints(v);
+    const distToRoute = nearestRouteDistKm(lat, lon, routePts);
+    if (distToRoute > VOYAGE_RADIUS_KM) continue;
+
+    let intersects = distToRoute <= VOYAGE_ON_PATH_KM;
+    for (let d = VOYAGE_SIGHTLINE_STEP_KM; !intersects && d <= VOYAGE_RADIUS_KM; d += VOYAGE_SIGHTLINE_STEP_KM) {
+      const p = destinationPoint(lat, lon, heading, d);
+      if (nearestRouteDistKm(p.lat, p.lon, routePts) <= VOYAGE_CORRIDOR_KM) intersects = true;
+    }
+    if (!intersects) continue;
+    if (distToRoute < bestDist) { bestDist = distToRoute; best = v; }
+  }
+  return best;
+}
+
+function updateVoyage(startLat, startLon, heading) {
+  matchedVoyage = findMatchingVoyage(startLat, startLon, heading);
+  if (!matchedVoyage) {
+    els.voyageBtn.hidden = true;
+    if (!els.voyagePanel.hidden) closeVoyage();
+    return;
+  }
+  els.voyageBtn.hidden = false;
+  els.voyageBtn.querySelector(".voyage-label").textContent = `⛵ ${matchedVoyage.name} (${matchedVoyage.year})`;
+  if (!els.voyagePanel.hidden) renderVoyagePanel();
+}
+
+function renderVoyagePanel() {
+  if (!matchedVoyage) return;
+  const v = matchedVoyage;
+  els.voyageTitle.textContent = v.name;
+  els.voyageMeta.textContent = String(v.year);
+  els.voyageSummary.textContent = v.summary;
+  els.voyageRoute.textContent = `${v.fromName} → ${v.toName} · ${dist(v.distanceKm)}`;
+}
+
+function openVoyage() {
+  if (!matchedVoyage) return;
+  renderVoyagePanel();
+  els.voyagePanel.hidden = false;
+}
+
+function closeVoyage() {
+  els.voyagePanel.hidden = true;
+}
+
+// ---------- service worker (offline + auto-update) ----------
+
+let swRegistration = null;
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", async () => {
+    try {
+      swRegistration = await navigator.serviceWorker.register("sw.js");
+      // A new sw.js on the server installs and (via skipWaiting + clients.claim
+      // in sw.js) takes control right away — reload so the page actually runs
+      // the new version rather than silently staying on the old cached one.
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+      // Registration alone only checks for a new sw.js on navigation; also
+      // check whenever the app comes back to the foreground so a deploy that
+      // happened while the tab was backgrounded is picked up promptly.
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) swRegistration.update().catch(() => {});
+      });
+    } catch (e) {
+      // Offline support is a nice-to-have; failing to register shouldn't block the app.
+    }
+  });
+}
+
 // ---------- init ----------
 
 async function init() {
+  registerServiceWorker();
+
   // Traffic-light statuses: network reflects connectivity now; compass and
   // location stay idle (grey) until you enable the sensors.
   const applyNetwork = () => setPermStatus("network", navigator.onLine === false ? "err" : "ok");
@@ -1260,6 +1415,10 @@ async function init() {
     const btn = e.target.closest(".woot-season");
     if (btn) pickWootSeason(btn.dataset.season);
   });
+
+  els.voyageBtn.addEventListener("click", openVoyage);
+  els.voyageClose.addEventListener("click", closeVoyage);
+  els.voyagePanel.addEventListener("click", (e) => { if (e.target === els.voyagePanel) closeVoyage(); });
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
