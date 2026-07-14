@@ -12,6 +12,8 @@ const MOVE_EPSILON_KM = 0.5; // location change before we re-run the trace
 const UI_HEADING_EPSILON = 0.5; // deg of change before we touch the compass DOM
 const SETTLE_MS = 200; // wait for the turn to settle before re-tracing the route
 const BIG_DRIFT_DEG = 25; // re-trace immediately once the heading drifts this far
+const VOYAGE_RADIUS_KM = 400; // how near you must be to a voyage's departure point
+const VOYAGE_BEARING_TOLERANCE = 20; // deg of heading match to that voyage's initial bearing
 
 const DIRS = [
   "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -37,6 +39,13 @@ const els = {
   wootList: document.getElementById("wootList"),
   wootClose: document.getElementById("wootClose"),
   wootSeasons: document.getElementById("wootSeasons"),
+  voyageBtn: document.getElementById("voyageBtn"),
+  voyagePanel: document.getElementById("voyagePanel"),
+  voyageTitle: document.getElementById("voyageTitle"),
+  voyageMeta: document.getElementById("voyageMeta"),
+  voyageSummary: document.getElementById("voyageSummary"),
+  voyageRoute: document.getElementById("voyageRoute"),
+  voyageClose: document.getElementById("voyageClose"),
 };
 
 let compassGotReading = false;
@@ -52,6 +61,8 @@ let cities = null;
 let sealife = null;
 let wootData = null; // current "who's out there" context
 let selectedSeason = null; // user's manual season pick; null = follow the real current season
+let voyages = null;
+let matchedVoyage = null; // the historic voyage currently matching position + heading
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
@@ -291,19 +302,22 @@ function dist(v) { return `${miles(v)} (${km(v)})`; }
 // ---------- data loading ----------
 
 async function loadData() {
-  const [countriesRes, marineRes, citiesRes, sealifeRes] = await Promise.all([
+  const [countriesRes, marineRes, citiesRes, sealifeRes, voyagesRes] = await Promise.all([
     fetch("data/countries.geojson"),
     fetch("data/marine.geojson"),
     fetch("data/cities.json"),
     fetch("data/sealife.json"),
+    fetch("data/voyages.json"),
   ]);
-  const [countries, marine, citiesJson, sealifeJson] = await Promise.all([
+  const [countries, marine, citiesJson, sealifeJson, voyagesJson] = await Promise.all([
     countriesRes.json(),
     marineRes.json(),
     citiesRes.json(),
     sealifeRes.json(),
+    voyagesRes.json(),
   ]);
   sealife = sealifeJson;
+  voyages = voyagesJson.voyages;
 
   landFeatures = countries.features.map((f) => ({
     name: f.properties.name,
@@ -636,6 +650,7 @@ function renderResult(startLat, startLon, heading, segments) {
   requestMapSpin();
   drawMapNow(true);
   updateWoot(startLat, startLon, heading, segments);
+  updateVoyage(startLat, startLon, heading);
 
   const hasLand = segments.some((s) => s.feat && s.startKm > 0);
   setStatus(hasLand ? "" : `Open ocean — no land within range facing ${cardinal(heading)}.`);
@@ -1229,9 +1244,90 @@ function pickWootSeason(season) {
   renderWootPanel();
 }
 
+// ---------- historic voyages ----------
+
+// A famous voyage "overlaps" your current view when you're near enough to its
+// departure point AND facing close enough to its initial great-circle bearing
+// — the same position+heading gating pattern as the coastal sea-life trigger.
+// If more than one qualifies, show whichever departure point is nearest.
+function findMatchingVoyage(lat, lon, heading) {
+  if (!voyages) return null;
+  let best = null, bestDist = Infinity;
+  for (const v of voyages) {
+    const d = haversineKm(lat, lon, v.fromLat, v.fromLon);
+    if (d > VOYAGE_RADIUS_KM) continue;
+    if (angleDelta(heading, v.bearingDeg) > VOYAGE_BEARING_TOLERANCE) continue;
+    if (d < bestDist) { bestDist = d; best = v; }
+  }
+  return best;
+}
+
+function updateVoyage(startLat, startLon, heading) {
+  matchedVoyage = findMatchingVoyage(startLat, startLon, heading);
+  if (!matchedVoyage) {
+    els.voyageBtn.hidden = true;
+    if (!els.voyagePanel.hidden) closeVoyage();
+    return;
+  }
+  els.voyageBtn.hidden = false;
+  els.voyageBtn.querySelector(".voyage-label").textContent = `⛵ ${matchedVoyage.name} (${matchedVoyage.year})`;
+  if (!els.voyagePanel.hidden) renderVoyagePanel();
+}
+
+function renderVoyagePanel() {
+  if (!matchedVoyage) return;
+  const v = matchedVoyage;
+  els.voyageTitle.textContent = v.name;
+  els.voyageMeta.textContent = String(v.year);
+  els.voyageSummary.textContent = v.summary;
+  els.voyageRoute.textContent = `${v.fromName} → ${v.toName} · ${dist(v.distanceKm)}`;
+}
+
+function openVoyage() {
+  if (!matchedVoyage) return;
+  renderVoyagePanel();
+  els.voyagePanel.hidden = false;
+}
+
+function closeVoyage() {
+  els.voyagePanel.hidden = true;
+}
+
+// ---------- service worker (offline + auto-update) ----------
+
+let swRegistration = null;
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", async () => {
+    try {
+      swRegistration = await navigator.serviceWorker.register("sw.js");
+      // A new sw.js on the server installs and (via skipWaiting + clients.claim
+      // in sw.js) takes control right away — reload so the page actually runs
+      // the new version rather than silently staying on the old cached one.
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+      // Registration alone only checks for a new sw.js on navigation; also
+      // check whenever the app comes back to the foreground so a deploy that
+      // happened while the tab was backgrounded is picked up promptly.
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) swRegistration.update().catch(() => {});
+      });
+    } catch (e) {
+      // Offline support is a nice-to-have; failing to register shouldn't block the app.
+    }
+  });
+}
+
 // ---------- init ----------
 
 async function init() {
+  registerServiceWorker();
+
   // Traffic-light statuses: network reflects connectivity now; compass and
   // location stay idle (grey) until you enable the sensors.
   const applyNetwork = () => setPermStatus("network", navigator.onLine === false ? "err" : "ok");
@@ -1260,6 +1356,10 @@ async function init() {
     const btn = e.target.closest(".woot-season");
     if (btn) pickWootSeason(btn.dataset.season);
   });
+
+  els.voyageBtn.addEventListener("click", openVoyage);
+  els.voyageClose.addEventListener("click", closeVoyage);
+  els.voyagePanel.addEventListener("click", (e) => { if (e.target === els.voyagePanel) closeVoyage(); });
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
