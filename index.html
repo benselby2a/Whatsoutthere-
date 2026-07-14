@@ -6,7 +6,7 @@
 <title>What's Out There?</title>
 <meta name="description" content="Point your iPhone or iPad and find out what landmass is across the sea in that direction." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="style.css?v=28" />
+<link rel="stylesheet" href="style.css?v=29" />
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#0b1020" />
 </head>
@@ -50,10 +50,13 @@
       <span class="woot-chevron">›</span>
     </button>
 
-    <button id="voyageBtn" class="woot-btn voyage-btn" hidden>
-      <span class="voyage-label">⛵ Historic voyage</span>
-      <span class="woot-chevron">›</span>
-    </button>
+    <div id="voyageRow" class="voyage-row" hidden>
+      <button id="voyageBtn" class="woot-btn voyage-btn">
+        <span class="voyage-label">⛵ Historic voyage</span>
+        <span class="woot-chevron">›</span>
+      </button>
+      <button id="voyageToggle" class="voyage-toggle" type="button" aria-pressed="true" title="Show or hide this route on the map">🗺️</button>
+    </div>
 
     <p class="status" id="status"></p>
   </main>
@@ -93,6 +96,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>
