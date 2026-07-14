@@ -1246,18 +1246,77 @@ function pickWootSeason(season) {
 
 // ---------- historic voyages ----------
 
-// A famous voyage "overlaps" your current view when you're near enough to its
-// departure point AND facing close enough to its initial great-circle bearing
-// — the same position+heading gating pattern as the coastal sea-life trigger.
-// If more than one qualifies, show whichever departure point is nearest.
+// A point a fraction `f` (0..1) along the great-circle path from (lat1,lon1)
+// to (lat2,lon2), given the path's angular length in radians — the standard
+// spherical slerp/intermediate-point formula. Used to sample a voyage's whole
+// route rather than just its departure point.
+function greatCircleInterpolate(lat1, lon1, lat2, lon2, f, angularDist) {
+  if (angularDist === 0) return { lat: lat1, lon: lon1 };
+  const A = Math.sin((1 - f) * angularDist) / Math.sin(angularDist);
+  const B = Math.sin(f * angularDist) / Math.sin(angularDist);
+  const phi1 = toRad(lat1), lambda1 = toRad(lon1);
+  const phi2 = toRad(lat2), lambda2 = toRad(lon2);
+  const x = A * Math.cos(phi1) * Math.cos(lambda1) + B * Math.cos(phi2) * Math.cos(lambda2);
+  const y = A * Math.cos(phi1) * Math.sin(lambda1) + B * Math.cos(phi2) * Math.sin(lambda2);
+  const z = A * Math.sin(phi1) + B * Math.sin(phi2);
+  const phi = Math.atan2(z, Math.sqrt(x * x + y * y));
+  const lambda = Math.atan2(y, x);
+  return { lat: toDeg(phi), lon: toDeg(lambda) };
+}
+
+const VOYAGE_PATH_SAMPLES = 40;
+const VOYAGE_ON_PATH_KM = 5; // close enough to the line itself that heading doesn't matter
+const VOYAGE_SIGHTLINE_STEP_KM = 25; // how finely to walk your sightline out looking for a crossing
+// How close your sightline needs to pass to a voyage's route to count as
+// "facing" it — chosen to match the old point+bearing check's selectivity
+// (roughly the cross-track offset a 20° bearing tolerance implies at
+// VOYAGE_RADIUS_KM range).
+const VOYAGE_CORRIDOR_KM = 140;
+
+// Sample points along a voyage's whole great-circle route (cached on the
+// voyage object, same pattern as the map's per-feature label-point cache).
+function voyageRoutePoints(v) {
+  if (v._routePts) return v._routePts;
+  const angularDist = haversineKm(v.fromLat, v.fromLon, v.toLat, v.toLon) / EARTH_RADIUS_KM;
+  const pts = [];
+  for (let i = 0; i <= VOYAGE_PATH_SAMPLES; i++) {
+    pts.push(greatCircleInterpolate(v.fromLat, v.fromLon, v.toLat, v.toLon, i / VOYAGE_PATH_SAMPLES, angularDist));
+  }
+  v._routePts = pts;
+  return pts;
+}
+
+function nearestRouteDistKm(lat, lon, routePts) {
+  let best = Infinity;
+  for (const p of routePts) {
+    const d = haversineKm(lat, lon, p.lat, p.lon);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// A famous voyage's route "overlaps" your current view when some point along
+// its whole great-circle path (not just its departure point) is within
+// VOYAGE_RADIUS_KM of you, AND your sightline — walked out step by step in
+// your current heading — actually passes near that route, rather than just
+// happening to have the route somewhere nearby in an unrelated direction.
+// Standing right on the route itself always counts, regardless of heading.
+// If more than one voyage qualifies, show whichever route is nearest.
 function findMatchingVoyage(lat, lon, heading) {
   if (!voyages) return null;
   let best = null, bestDist = Infinity;
   for (const v of voyages) {
-    const d = haversineKm(lat, lon, v.fromLat, v.fromLon);
-    if (d > VOYAGE_RADIUS_KM) continue;
-    if (angleDelta(heading, v.bearingDeg) > VOYAGE_BEARING_TOLERANCE) continue;
-    if (d < bestDist) { bestDist = d; best = v; }
+    const routePts = voyageRoutePoints(v);
+    const distToRoute = nearestRouteDistKm(lat, lon, routePts);
+    if (distToRoute > VOYAGE_RADIUS_KM) continue;
+
+    let intersects = distToRoute <= VOYAGE_ON_PATH_KM;
+    for (let d = VOYAGE_SIGHTLINE_STEP_KM; !intersects && d <= VOYAGE_RADIUS_KM; d += VOYAGE_SIGHTLINE_STEP_KM) {
+      const p = destinationPoint(lat, lon, heading, d);
+      if (nearestRouteDistKm(p.lat, p.lon, routePts) <= VOYAGE_CORRIDOR_KM) intersects = true;
+    }
+    if (!intersects) continue;
+    if (distToRoute < bestDist) { bestDist = distToRoute; best = v; }
   }
   return best;
 }

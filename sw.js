@@ -3,13 +3,13 @@
 // Bump this on every deploy that changes any cached file — it both busts the
 // cache and, because the browser byte-diffs sw.js itself to detect updates,
 // is what makes a new deploy install a new service worker at all.
-const CACHE_NAME = "wot-cache-v26";
+const CACHE_NAME = "wot-cache-v27";
 
 const PRECACHE_URLS = [
   "./",
   "index.html",
-  "style.css?v=26",
-  "app.js?v=26",
+  "style.css?v=27",
+  "app.js?v=27",
   "manifest.json",
   "data/countries.geojson",
   "data/marine.geojson",
