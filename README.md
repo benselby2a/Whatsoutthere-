@@ -35,9 +35,6 @@ step.
    against Natural Earth's marine polygons (`data/marine.geojson`), and the
    nearest city to each landfall is found from a bundled populated-places
    list (`data/cities.json`).
-6. If your position and heading roughly line up with the departure point and
-   initial bearing of a famous historic voyage (`data/voyages.json`), a
-   button appears letting you read about it.
 
 ## Offline support
 
