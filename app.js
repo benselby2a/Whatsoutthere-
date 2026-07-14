@@ -865,7 +865,15 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
     ctx.closePath();
   };
 
-  const drawCallout = (anchorX, anchorY, lines, borderColor) => {
+  // `nudgeUp`: which way to push a callout that collides with an already-
+  // placed one. Destination callouts are drawn nearest-first (1, 2, 3…), and
+  // in this heading-up map "up" is away from the user / farther along the
+  // route — so a farther destination must nudge up past a nearer one's box,
+  // never down past it, or the labels visually swap distance order. The
+  // "you are here" callout (drawn last, not part of that sequence) keeps the
+  // opposite default: nudge down, since it should never end up above a
+  // destination it collides with.
+  const drawCallout = (anchorX, anchorY, lines, borderColor, nudgeUp = false) => {
     let w = 0;
     for (const ln of lines) { ctx.font = ln.font; w = Math.max(w, ctx.measureText(ln.text).width); }
     const padX = 6, padY = 5;
@@ -875,10 +883,14 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
     let by = anchorY - boxH / 2;
     bx = Math.min(Math.max(bx, 2), cssW - boxW - 2);
     by = Math.min(Math.max(by, 2), cssH - boxH - 2);
-    for (let t = 0; t < 6; t++) { // nudge down past already-placed boxes
+    for (let t = 0; t < 6; t++) { // nudge past already-placed boxes
       let hit = false;
       for (const p of placed) {
-        if (!(bx + boxW < p[0] || bx > p[2] || by + boxH < p[1] || by > p[3])) { hit = true; by = Math.min(p[3] + 3, cssH - boxH - 2); break; }
+        if (!(bx + boxW < p[0] || bx > p[2] || by + boxH < p[1] || by > p[3])) {
+          hit = true;
+          by = nudgeUp ? Math.max(p[1] - boxH - 3, 2) : Math.min(p[3] + 3, cssH - boxH - 2);
+          break;
+        }
       }
       if (!hit) break;
     }
@@ -902,7 +914,7 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
       drawCallout(x, y, [
         { text: `${destIndex}. ${s.feat.name}`, font: fontName, color: C.labelAhead },
         { text: `${miles(s.startKm)}${s.cityName ? " · " + s.cityName : ""}`, font: fontSub, color: C.labelText },
-      ], C.aheadStroke);
+      ], C.aheadStroke, true);
     } else {
       startFeat = s.feat;
     }
