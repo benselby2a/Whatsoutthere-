@@ -351,6 +351,27 @@ h1 { font-size: 1.2rem; margin: 0; }
 .woot-empty { color: var(--text-dim); padding: 12px 0; }
 .woot-foot { color: var(--text-dim); font-size: 0.75rem; margin: 14px 0 0; }
 
+/* ---- Historic voyage row (trigger + map-route toggle) ---- */
+.voyage-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.voyage-row[hidden] { display: none; }
+.voyage-row .voyage-btn { flex: 1 1 auto; }
+.voyage-toggle {
+  flex: 0 0 auto;
+  width: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+.voyage-toggle[aria-pressed="false"] { opacity: 0.4; }
+.voyage-toggle:active { transform: scale(0.96); }
+
 /* ---- Historic voyage sheet ---- */
 .voyage-summary { font-size: 0.92rem; line-height: 1.45; margin: 0 0 10px; }
 .voyage-route { color: var(--text-dim); font-size: 0.82rem; margin: 0; }

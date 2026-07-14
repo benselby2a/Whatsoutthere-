@@ -39,7 +39,9 @@ const els = {
   wootList: document.getElementById("wootList"),
   wootClose: document.getElementById("wootClose"),
   wootSeasons: document.getElementById("wootSeasons"),
+  voyageRow: document.getElementById("voyageRow"),
   voyageBtn: document.getElementById("voyageBtn"),
+  voyageToggle: document.getElementById("voyageToggle"),
   voyagePanel: document.getElementById("voyagePanel"),
   voyageTitle: document.getElementById("voyageTitle"),
   voyageMeta: document.getElementById("voyageMeta"),
@@ -63,6 +65,7 @@ let wootData = null; // current "who's out there" context
 let selectedSeason = null; // user's manual season pick; null = follow the real current season
 let voyages = null;
 let matchedVoyage = null; // the historic voyage currently matching position + heading
+let voyageRouteVisible = true; // user's show/hide toggle for the voyage route overlay on the map
 let currentHeading = null;
 let currentPosition = null; // {lat, lon}
 let roseAngle = 0; // continuous (unwrapped) rose rotation, for smooth turns
@@ -661,9 +664,9 @@ function renderResult(startLat, startLon, heading, segments) {
   if (mapFramingKm === null) mapFramingKm = targetFramingKm; // no ease on first paint
   els.mapEmpty.hidden = true;
   requestMapSpin();
-  drawMapNow(true);
   updateWoot(startLat, startLon, heading, segments);
   updateVoyage(startLat, startLon, heading);
+  drawMapNow(true);
 
   const hasLand = segments.some((s) => s.feat && s.startKm > 0);
   setStatus(hasLand ? "" : `Open ocean — no land within range facing ${cardinal(heading)}.`);
@@ -714,8 +717,8 @@ function runLiveScan() {
 function mapColors() {
   const dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
   return dark
-    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)", panelBg: "rgba(9,15,28,0.86)", labelStart: "#ffd9a8", seaLabel: "#93a6cc" }
-    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)", panelBg: "rgba(255,255,255,0.9)", labelStart: "#8a4b12", seaLabel: "#5a6b8f" };
+    ? { sea: "#0d1526", land: "#26324e", coast: "#46557d", aheadFill: "rgba(79,209,197,0.32)", aheadStroke: "#4fd1c5", path: "#f6ad55", user: "#f6ad55", userRing: "#0d1526", labelText: "#c8d3ef", labelAhead: "#eafff9", labelHalo: "rgba(5,10,20,0.85)", panelBg: "rgba(9,15,28,0.86)", labelStart: "#ffd9a8", seaLabel: "#93a6cc", voyagePath: "#c084fc", voyageLabel: "#f3e8ff" }
+    : { sea: "#cfe0f2", land: "#c2cde0", coast: "#8194b6", aheadFill: "rgba(47,184,171,0.35)", aheadStroke: "#2fb8ab", path: "#d9772a", user: "#d9772a", userRing: "#ffffff", labelText: "#2a3550", labelAhead: "#0f5f57", labelHalo: "rgba(255,255,255,0.88)", panelBg: "rgba(255,255,255,0.9)", labelStart: "#8a4b12", seaLabel: "#5a6b8f", voyagePath: "#7c3aed", voyageLabel: "#4c1d95" };
 }
 
 // Area-weighted centroid of a ring (falls back to the vertex average for
@@ -924,6 +927,24 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
   ctx.stroke();
   ctx.setLineDash([]);
 
+  // A matched historic voyage's whole route, drawn under your own path/labels
+  // in a distinct colour + dash so it reads as a separate, background layer
+  // rather than competing with your live heading. Togglable via voyageToggle.
+  if (matchedVoyage && voyageRouteVisible) {
+    const routePts = voyageRoutePoints(matchedVoyage);
+    ctx.beginPath();
+    for (let i = 0; i < routePts.length; i++) {
+      const [x, y] = project(routePts[i].lat, routePts[i].lon);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = C.voyagePath;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([2, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   // ---- Annotations: destination callouts (country + cumulative distance +
   // nearest city), a "you are here" callout, sea names, then neighbour names. ----
   const placed = [];
@@ -993,6 +1014,21 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
       ], C.aheadStroke, true);
     } else {
       startFeat = s.feat;
+    }
+  }
+  // Label the matched voyage's route at whichever sampled point of it falls
+  // within the visible canvas first — the route can run far outside the
+  // current framing, so there may be no on-screen point to label at all.
+  if (matchedVoyage && voyageRouteVisible) {
+    const routePts = voyageRoutePoints(matchedVoyage);
+    for (const p of routePts) {
+      const [x, y] = project(p.lat, p.lon);
+      if (x < 0 || x > cssW || y < 0 || y > cssH) continue;
+      drawCallout(x, y, [
+        { text: `⛵ ${matchedVoyage.name}`, font: fontName, color: C.voyageLabel },
+        { text: String(matchedVoyage.year), font: fontSub, color: C.labelText },
+      ], C.voyagePath);
+      break;
     }
   }
   // Label your own position too, even when you're not standing on any
@@ -1337,13 +1373,19 @@ function findMatchingVoyage(lat, lon, heading) {
 function updateVoyage(startLat, startLon, heading) {
   matchedVoyage = findMatchingVoyage(startLat, startLon, heading);
   if (!matchedVoyage) {
-    els.voyageBtn.hidden = true;
+    els.voyageRow.hidden = true;
     if (!els.voyagePanel.hidden) closeVoyage();
     return;
   }
-  els.voyageBtn.hidden = false;
+  els.voyageRow.hidden = false;
   els.voyageBtn.querySelector(".voyage-label").textContent = `⛵ ${matchedVoyage.name} (${matchedVoyage.year})`;
   if (!els.voyagePanel.hidden) renderVoyagePanel();
+}
+
+function toggleVoyageRoute() {
+  voyageRouteVisible = !voyageRouteVisible;
+  els.voyageToggle.setAttribute("aria-pressed", String(voyageRouteVisible));
+  drawMapNow(true);
 }
 
 function renderVoyagePanel() {
@@ -1432,6 +1474,7 @@ async function init() {
   els.voyageBtn.addEventListener("click", openVoyage);
   els.voyageClose.addEventListener("click", closeVoyage);
   els.voyagePanel.addEventListener("click", (e) => { if (e.target === els.voyagePanel) closeVoyage(); });
+  els.voyageToggle.addEventListener("click", toggleVoyageRoute);
 
   els.enableBtn.addEventListener("click", () => {
     els.enableBtn.disabled = true;
