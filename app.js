@@ -301,20 +301,33 @@ function dist(v) { return `${miles(v)} (${km(v)})`; }
 
 // ---------- data loading ----------
 
+// The bundled datasets are plain-text JSON/GeoJSON, which gzips extremely
+// well (60-90% smaller) — so a gzipped copy is fetched and inflated with the
+// browser's native DecompressionStream instead of fetching the much larger
+// original. Falls back to the uncompressed file on any older browser lacking
+// DecompressionStream (or if the .gz fetch fails for some other reason).
+async function fetchJSON(url) {
+  if (typeof DecompressionStream === "function") {
+    try {
+      const res = await fetch(url + ".gz");
+      if (res.ok) {
+        const inflated = res.body.pipeThrough(new DecompressionStream("gzip"));
+        return JSON.parse(await new Response(inflated).text());
+      }
+    } catch (e) {
+      // fall through to the uncompressed original below
+    }
+  }
+  return (await fetch(url)).json();
+}
+
 async function loadData() {
-  const [countriesRes, marineRes, citiesRes, sealifeRes, voyagesRes] = await Promise.all([
-    fetch("data/countries.geojson"),
-    fetch("data/marine.geojson"),
-    fetch("data/cities.json"),
-    fetch("data/sealife.json"),
-    fetch("data/voyages.json"),
-  ]);
   const [countries, marine, citiesJson, sealifeJson, voyagesJson] = await Promise.all([
-    countriesRes.json(),
-    marineRes.json(),
-    citiesRes.json(),
-    sealifeRes.json(),
-    voyagesRes.json(),
+    fetchJSON("data/countries.geojson"),
+    fetchJSON("data/marine.geojson"),
+    fetchJSON("data/cities.json"),
+    fetchJSON("data/sealife.json"),
+    fetchJSON("data/voyages.json"),
   ]);
   sealife = sealifeJson;
   voyages = voyagesJson.voyages;
