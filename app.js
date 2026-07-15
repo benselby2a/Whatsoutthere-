@@ -738,24 +738,52 @@ function labelPoint(geometry) {
   return polygonCentroid(best);
 }
 
+// A ring's longitudes, made locally continuous (each point chosen as
+// whichever of lon±360k lands closest to the previous point, so real
+// coastlines never jump) and then rigidly shifted as one whole unit to sit
+// near startLon. This matters because naively unwrapping every vertex
+// relative to the (potentially far-away) user position — as a single global
+// `unwrap(lon)` does — creates a false seam at the user's own antipodal
+// meridian: a wide or high-latitude country that happens to straddle that
+// unrelated line (e.g. Scandinavia, when viewed from Alaska) gets chopped
+// into fragments that the fill then auto-closes into long spurious streaks.
+// Unwrapping per-ring like this only ever breaks at a genuine dateline
+// crossing within the ring itself, which practice basically never happens —
+// real antimeridian-straddling countries (Russia, Fiji) are already split
+// into separate polygon parts in the source data.
+function unwrapRingLongitudes(ring, startLon) {
+  const lons = new Array(ring.length);
+  let prev = ring[0][0];
+  lons[0] = prev;
+  for (let i = 1; i < ring.length; i++) {
+    let lon = ring[i][0];
+    while (lon - prev > 180) lon -= 360;
+    while (lon - prev < -180) lon += 360;
+    lons[i] = lon;
+    prev = lon;
+  }
+  let shift = 0;
+  while (lons[0] + shift - startLon > 180) shift -= 360;
+  while (lons[0] + shift - startLon < -180) shift += 360;
+  if (shift !== 0) for (let i = 0; i < lons.length; i++) lons[i] += shift;
+  return lons;
+}
+
 // Draw one land feature (Polygon/MultiPolygon), each polygon as its own path so
-// even-odd hole handling doesn't bleed across separate islands. `seamPx` breaks
-// an edge when consecutive points jump too far in x, which stops countries near
-// the antimeridian from streaking a line across the whole map.
-function drawFeature(ctx, geometry, project, fill, stroke, lineWidth, seamPx) {
+// even-odd hole handling doesn't bleed across separate islands. `projectRaw`
+// takes an already-unwrapped longitude directly (see unwrapRingLongitudes)
+// rather than the shared `project`'s own per-point unwrap, which is what a
+// ring needs to stay a single coherent shape near the antimeridian.
+function drawFeature(ctx, geometry, projectRaw, startLon, fill, stroke, lineWidth) {
   const polys = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
   for (const rings of polys) {
     ctx.beginPath();
     for (const ring of rings) {
-      let prevX = null;
+      const lons = unwrapRingLongitudes(ring, startLon);
       for (let i = 0; i < ring.length; i++) {
-        const [x, y] = project(ring[i][1], ring[i][0]);
-        if (i === 0 || (prevX !== null && Math.abs(x - prevX) > seamPx)) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-        prevX = x;
+        const [x, y] = projectRaw(ring[i][1], lons[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
     }
     ctx.fillStyle = fill;
@@ -866,6 +894,14 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
     const [rx, ry] = rot(unwrap(lon) * k, lat);
     return [offX + (rx - minRX) * scale, offY + (maxRY - ry) * scale];
   };
+  // Like `project`, but takes a longitude that's already been unwrapped
+  // (see unwrapRingLongitudes) instead of unwrapping it itself — used for
+  // land-polygon rings, where per-vertex unwrapping relative to startLon is
+  // the wrong thing to do (see drawFeature).
+  const projectRaw = (lat, lon) => {
+    const [rx, ry] = rot(lon * k, lat);
+    return [offX + (rx - minRX) * scale, offY + (maxRY - ry) * scale];
+  };
 
   ctx.fillStyle = C.sea;
   ctx.fillRect(0, 0, cssW, cssH);
@@ -892,7 +928,7 @@ function drawMap(startLat, startLon, heading, segments, full = true, framingKm =
     const lo = unwrap(b[0]), hi = unwrap(b[2]);
     if (Math.max(lo, hi) < cullMinLon || Math.min(lo, hi) > cullMaxLon) continue;
     const ahead = highlights.has(f);
-    drawFeature(ctx, f.geometry, project, ahead ? C.aheadFill : C.land, ahead ? C.aheadStroke : C.coast, ahead ? 1.6 : 0.7, cssW * 0.5);
+    drawFeature(ctx, f.geometry, projectRaw, startLon, ahead ? C.aheadFill : C.land, ahead ? C.aheadStroke : C.coast, ahead ? 1.6 : 0.7);
   }
 
   // Great-circle path.
