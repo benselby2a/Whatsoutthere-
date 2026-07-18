@@ -3,7 +3,7 @@
 // Bump this on every deploy that changes any cached file — it both busts the
 // cache and, because the browser byte-diffs sw.js itself to detect updates,
 // is what makes a new deploy install a new service worker at all.
-const CACHE_NAME = "wot-cache-v33";
+const CACHE_NAME = "wot-cache-v34";
 
 // The data files are precached as their gzipped copies — app.js fetches and
 // inflates those with DecompressionStream on any browser that supports it
